@@ -4,6 +4,8 @@ export type Product = {
   /** Codename shown in the UI. */
   name: string
   tagline: string
+  /** Longer copy, for meta descriptions and the marketing page. */
+  description: string
   /** Brand accent (CSS color). */
   accent: string
   /** Extra top-level pages, listed above resources. */

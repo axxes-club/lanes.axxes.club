@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { switchOrganization } from "@/lib/actions/org"
+import { cx } from "@/components/ui"
 import type { Membership } from "@/lib/context"
 
 // Inline rather than lucide-react: this app does not depend on it, and adding
@@ -37,19 +38,36 @@ function ChevronsUpDown({ className }: { className?: string }) {
 export function OrgSwitcher({
   current,
   memberships,
+  collapsed = false,
 }: {
   current: Membership
   memberships: Membership[]
+  collapsed?: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
+  // Collapsed and a single organization: the initial "here is your
+  // workspace" card is pure furniture, so the sidebar shows a monogram.
+  if (collapsed && memberships.length < 2) {
+    return (
+      <div
+        className="hidden place-items-center py-1.5 lg:grid"
+        title={`${current.name} · ${current.role}`}
+      >
+        <span className="grid size-8 place-items-center rounded-lg bg-panel-3 text-[11px] font-bold text-muted">
+          {current.name.slice(0, 2).toUpperCase()}
+        </span>
+      </div>
+    )
+  }
+
   if (memberships.length < 2) {
     return (
-      <div className="rounded-lg border border-line px-2.5 py-1.5">
-        <p className="truncate font-medium text-text">{current.name}</p>
-        <p className="truncate text-muted">Your organization</p>
+      <div className={cx("rounded-lg border border-line px-2.5 py-1.5", collapsed && "lg:border-0 lg:p-0")}>
+        <p className="truncate text-xs font-medium text-text">{current.name}</p>
+        <p className="truncate text-[10px] text-muted">Your workspace</p>
       </div>
     )
   }
@@ -71,15 +89,26 @@ export function OrgSwitcher({
         aria-expanded={open}
         aria-haspopup="listbox"
         disabled={pending}
-        className="flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left transition hover:bg-panel-2 disabled:opacity-60"
+        className={cx(
+          "flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left transition hover:bg-panel-2 disabled:opacity-60",
+          collapsed && "lg:justify-center lg:border-0 lg:p-0",
+        )}
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium text-text">{current.name}</span>
-          <span className="block truncate text-[10px] capitalize text-muted">
-            {pending ? "Switching…" : current.role.replace("_", " ")}
+        {collapsed ? (
+          <span className="grid size-8 place-items-center rounded-lg bg-panel-3 text-[11px] font-bold text-muted lg:grid">
+            {current.name.slice(0, 2).toUpperCase()}
           </span>
-        </span>
-        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+        ) : (
+          <>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium text-text">{current.name}</span>
+              <span className="block truncate text-[10px] text-muted capitalize">
+                {pending ? "Switching…" : current.role.replace("_", " ")}
+              </span>
+            </span>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+          </>
+        )}
       </button>
 
       {open && (

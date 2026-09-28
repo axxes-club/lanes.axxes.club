@@ -7,6 +7,7 @@ import { randomBytes } from "crypto"
 import { db, schema as s } from "@/lib/db"
 import { requireContext } from "@/lib/context"
 import { cardSeq, getCardDetail, keyPrefix } from "./data"
+import { template } from "./templates"
 import type { CardDetailT, Priority } from "./types"
 
 const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"]
@@ -51,25 +52,46 @@ export async function createBoard(form: FormData) {
   const ctx = await requireContext()
   const name = String(form.get("name") ?? "").trim().slice(0, 100)
   if (!name) throw new Error("Give the board a name")
-  const color = String(form.get("color") ?? "") || "#60a5fa"
-  const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "board"}-${randomBytes(3).toString("hex")}`
+  const color = String(form.get("color") ?? "") || "#5b8cff"
+
+  // The template registry is the one place that knows what a "sprint board"
+  // or a "bug tracker" is made of. Adding a template is a data change, not a
+  // deploy, and the old inline lists here are gone so the two cannot drift.
+  const chosen = template(String(form.get("template") ?? "kanban")) ?? template("kanban")!
+  const displayName = name
 
   const [project] = await db
     .insert(s.projects)
-    .values({ tenantId: ctx.tenant.id, name, slug, color, createdById: ctx.userId, settings: { keyPrefix: keyPrefix(null, name) } })
+    .values({
+      tenantId: ctx.tenant.id,
+      name: displayName,
+      slug: `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "board"}-${randomBytes(3).toString("hex")}`,
+      color,
+      createdById: ctx.userId,
+      isTemplate: false,
+      settings: {
+        keyPrefix: keyPrefix(null, displayName),
+        cardColor: chosen.cardColor,
+        template: chosen.key,
+      },
+    })
     .returning()
-  const template = String(form.get("template") ?? "kanban")
-  const lists =
-    template === "sprint"
-      ? ["Backlog", "Up next", "In progress", "In review", "Done"]
-      : template === "pipeline"
-        ? ["Leads", "Contacted", "Proposal", "Won"]
-        : ["To do", "In progress", "Done"]
-  await db.insert(s.projectLists).values(lists.map((n, i) => ({ projectId: project.id, name: n, position: i, isDoneList: i === lists.length - 1 })))
-  await db.insert(s.projectLabels).values(
-    [["Bug", LABEL_COLORS[0]], ["Feature", LABEL_COLORS[3]], ["Design", LABEL_COLORS[4]], ["Blocked", LABEL_COLORS[1]]].map(([n, c]) => ({ projectId: project.id, name: n, color: c }))
+
+  await db.insert(s.projectLists).values(
+    chosen.lists.map((l, i) => ({
+      projectId: project.id,
+      name: l.name,
+      position: i,
+      isDoneList: l.done ?? false,
+      wipLimit: l.wip ?? null,
+    })),
   )
-  await log(ctx, project.id, "board.created", `created the board`)
+  if (chosen.labels.length) {
+    await db.insert(s.projectLabels).values(
+      chosen.labels.map((l) => ({ projectId: project.id, name: l.name, color: l.color })),
+    )
+  }
+  await log(ctx, project.id, "board.created", `created the board from the ${chosen.name} template`)
   redirect(`/dashboard/b/${project.id}`)
 }
 

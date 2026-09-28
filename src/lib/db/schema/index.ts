@@ -57,3 +57,5 @@ export * from "./integrations"
 
 // Projects (Kanban)
 export * from "./projects"
+// Enterprise delivery: roles, sprints, poker, integrations, API
+export * from "./lanes-enterprise"

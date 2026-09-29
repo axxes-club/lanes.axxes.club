@@ -48,6 +48,10 @@ export const projects = pgTable("projects", {
     enableComments?: boolean
     defaultListColor?: string
     keyPrefix?: string
+    /** Tint applied to every card, so a board is recognisable at a glance. */
+    cardColor?: string
+    /** Which template this board was created from, e.g. "sprint-board". */
+    template?: string
   }>().default({}),
 
   // Audit

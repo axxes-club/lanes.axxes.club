@@ -1,42 +1,399 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Lanes design system.
+
+   Everything visual in the product is built from the tokens in this file —
+   no component hard-codes a hex value. Two reasons: a product spanning
+   marketing, docs and app has to be able to change its accent without a
+   sweep through sixty files, and a person who needs 200% contrast should be
+   able to get it from one control.
+
+   Themes are set as `data-theme` on <html> by a tiny inline script before
+   paint (see ThemeScript), because a dark-to-light swap after hydration is a
+   white flash. Default is dark.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 @import "tailwindcss";
 
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
 :root {
-  --bg: #0a0a0b;
-  --panel: #111113;
-  --panel-2: #17171a;
-  --line: #26262b;
-  --text: #ededef;
-  --muted: #8b8b93;
-  --accent: var(--product-accent, #c8ff3d);
-  --accent-ink: #0a0a0b;
-  --danger: #ff5c5c;
+  color-scheme: dark;
+
+  /* Surfaces, from furthest back to closest to the reader */
+  --bg: #08080a;
+  --bg-grid: #ffffff08;
+  --panel: #0f0f12;
+  --panel-2: #151519;
+  --panel-3: #1c1c21;
+  --panel-hi: #202027;
+
+  /* Lines */
+  --line: #232329;
+  --line-soft: #1a1a1e;
+  --line-strong: #34343d;
+
+  /* Text */
+  --text: #f2f2f4;
+  --text-2: #c9c9d0;
+  --muted: #8a8a95;
+  --faint: #61616d;
+
+  /* Brand */
+  --accent: var(--product-accent, #5b8cff);
+  --accent-fg: #06070c;
+  --accent-soft: color-mix(in oklab, var(--accent) 16%, transparent);
+  --accent-line: color-mix(in oklab, var(--accent) 40%, transparent);
+
+  /* Semantic */
+  --success: #34d399;
+  --success-soft: color-mix(in oklab, #34d399 15%, transparent);
+  --warning: #fbbf24;
+  --warning-soft: color-mix(in oklab, #fbbf24 15%, transparent);
+  --danger: #f87171;
+  --danger-soft: color-mix(in oklab, #f87171 15%, transparent);
+  --info: #60a5fa;
+  --info-soft: color-mix(in oklab, #60a5fa 15%, transparent);
+  --violet: #a78bfa;
+  --violet-soft: color-mix(in oklab, #a78bfa 15%, transparent);
+
+  /* Effects */
+  --ring: color-mix(in oklab, var(--accent) 55%, transparent);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow: 0 4px 16px -4px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 24px 60px -12px rgb(0 0 0 / 0.65), 0 4px 12px rgb(0 0 0 / 0.4);
+
+  /* Geometry + rhythm */
+  --radius: 0.75rem;
+  --sidebar: 16rem;
+  --header: 3.5rem;
+}
+
+/* Light is a designed theme, not an inversion. Contrast ratios are chosen
+   against real backgrounds rather than flipped values. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-grid: #0f172a08;
+  --panel: #ffffff;
+  --panel-2: #f7f8fa;
+  --panel-3: #eceff4;
+  --panel-hi: #e6eaf1;
+
+  --line: #e3e6ec;
+  --line-soft: #eef1f5;
+  --line-strong: #c9d0da;
+
+  --text: #0b0e14;
+  --text-2: #333a47;
+  --muted: #646c7b;
+  --faint: #949dab;
+
+  --accent: var(--product-accent, #2563eb);
+  --accent-fg: #ffffff;
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, transparent);
+  --accent-line: color-mix(in oklab, var(--accent) 35%, transparent);
+
+  --success: #047857;
+  --success-soft: color-mix(in oklab, #047857 12%, transparent);
+  --warning: #b45309;
+  --warning-soft: color-mix(in oklab, #b45309 12%, transparent);
+  --danger: #dc2626;
+  --danger-soft: color-mix(in oklab, #dc2626 10%, transparent);
+  --info: #2563eb;
+  --info-soft: color-mix(in oklab, #2563eb 10%, transparent);
+  --violet: #7c3aed;
+  --violet-soft: color-mix(in oklab, #7c3aed 10%, transparent);
+
+  --ring: color-mix(in oklab, var(--accent) 45%, transparent);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow: 0 4px 16px -4px rgb(15 23 42 / 0.1), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 24px 60px -16px rgb(15 23 42 / 0.18), 0 4px 12px rgb(15 23 42 / 0.08);
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-panel-hi: var(--panel-hi);
   --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
   --color-text: var(--text);
+  --color-text-2: var(--text-2);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui;
-  --font-mono: var(--font-geist-mono), ui-monospace;
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow);
+  --shadow-lg: var(--shadow-lg);
+
+  --animate-fade-in: fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pop-in: pop-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-up: slide-up 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.4s ease-in-out infinite;
 }
 
-html { color-scheme: dark; }
-body { background: var(--bg); color: var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-::selection { background: var(--accent); color: var(--accent-ink); }
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-4px) }
+  to { opacity: 1; transform: scale(1) translateY(0) }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0 }
+  to { background-position: 200% 0 }
+}
+@keyframes pulse-ring { 0%, 100% { opacity: 0.5 } 50% { opacity: 1 } }
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
+* { border-color: var(--line); }
+
+html {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+html[data-theme="light"] { color-scheme: light; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* One focus treatment everywhere, and only ever visible for keyboard users —
+   a mouse click should not leave a ring behind. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@supports (scrollbar-width: thin) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+@layer base {
+  input, textarea, select, button { font: inherit; color: inherit; }
+  /* Stop iOS zooming the whole page when a field is focused. */
+  input, select, textarea { font-size: max(16px, 0.875rem); }
+  @media (min-width: 640px) { input, select, textarea { font-size: 0.875rem } }
+  input::placeholder, textarea::placeholder { color: var(--faint); }
+  [type="checkbox"], [type="radio"] { accent-color: var(--accent); }
+}
+
+/* ── Utilities ────────────────────────────────────────────────────────── */
 
 @utility input {
-  @apply w-full rounded-lg border border-line bg-panel-2 px-3 py-2 text-sm text-text outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-2 focus:ring-accent/20;
+  @apply w-full rounded-md border border-line bg-panel-2 px-3 py-2 text-sm text-text outline-none transition;
+  @apply placeholder:text-faint focus:border-accent focus:bg-panel focus:ring-2 focus:ring-accent/20;
+  @apply disabled:cursor-not-allowed disabled:opacity-50;
 }
+@utility input-sm { @apply py-1.5 text-xs; }
+
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50;
+  @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition;
+  @apply active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50;
 }
-@utility btn-primary { @apply btn bg-accent text-accent-ink hover:brightness-110; }
-@utility btn-ghost { @apply btn border border-line text-text hover:bg-panel-2; }
-@utility btn-danger { @apply btn border border-danger/40 text-danger hover:bg-danger/10; }
-@utility card { @apply rounded-2xl border border-line bg-panel; }
+@utility btn-sm { @apply h-8 px-2.5 text-xs; }
+@utility btn-md { @apply h-9 px-3.5; }
+@utility btn-lg { @apply h-11 px-5 text-[15px]; }
+@utility btn-icon { @apply size-9 shrink-0; }
+@utility btn-icon-sm { @apply size-8 shrink-0; }
+
+@utility btn-primary { @apply btn bg-accent text-accent-fg shadow-sm hover:brightness-110; }
+@utility btn-ghost { @apply btn text-text-2 hover:bg-panel-3 hover:text-text; }
+@utility btn-outline { @apply btn border border-line bg-panel-2 text-text hover:border-line-strong hover:bg-panel-3; }
+@utility btn-danger { @apply btn border border-danger/30 bg-danger-soft text-danger hover:bg-danger/20; }
+@utility btn-subtle { @apply btn bg-panel-3 text-text-2 hover:bg-panel-hi hover:text-text; }
+
+@utility card { @apply rounded-xl border border-line bg-panel; }
+@utility card-hover { @apply card transition hover:border-line-strong hover:bg-panel-2; }
+
+/* A small uppercase eyebrow, used for section labels across the product. */
+@utility eyebrow {
+  @apply font-mono text-[10px] font-medium tracking-[0.18em] text-muted uppercase;
+}
+
+@utility kbd {
+  @apply inline-flex h-5 min-w-5 items-center justify-center rounded border border-line-strong bg-panel-3 px-1.5 font-mono text-[10px] font-medium text-muted;
+}
+
+@utility accent-gradient {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(180deg, color-mix(in oklab, var(--accent) 55%, white) 0%, var(--accent) 80%);
+}
+
+@utility text-gradient {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(180deg, var(--text) 25%, var(--muted));
+}
+
+@utility grid-bg {
+  background-image:
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@utility radial-fade {
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+@utility skeleton {
+  @apply rounded-md bg-panel-3;
+  background-image: linear-gradient(90deg, transparent, color-mix(in oklab, var(--text) 6%, transparent), transparent);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Prose for the docs site, without pulling in a markdown dependency. The
+   selectors are plain CSS rather than @utility because Tailwind v4 utility
+   names cannot contain a descendant combinator. */
+.prose-doc { font-size: 15px; line-height: 1.75; color: var(--text-2); }
+.prose-doc > :first-child { margin-top: 0; }
+.prose-doc h2 {
+  margin: 3rem 0 1rem;
+  scroll-margin-top: 6rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.prose-doc h3 {
+  margin: 2rem 0 0.75rem;
+  scroll-margin-top: 6rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.prose-doc h4 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.prose-doc p { margin: 1rem 0; }
+.prose-doc a {
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 30%, transparent);
+  text-underline-offset: 4px;
+}
+.prose-doc a:hover { text-decoration-color: var(--accent); }
+.prose-doc strong { font-weight: 600; color: var(--text); }
+.prose-doc code {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-2);
+  padding: 0.125rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--text);
+}
+.prose-doc ul { margin: 1rem 0; list-style: disc; padding-left: 1.25rem; }
+.prose-doc ol { margin: 1rem 0; list-style: decimal; padding-left: 1.25rem; }
+.prose-doc li { margin: 0.375rem 0; }
+.prose-doc li::marker { color: var(--faint); }
+.prose-doc blockquote {
+  margin: 1.5rem 0;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 0.5rem 1rem;
+  font-style: italic;
+  color: var(--text-2);
+}
+.prose-doc table { margin: 1.5rem 0; width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.prose-doc th {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+.prose-doc td { border-bottom: 1px solid var(--line-soft); padding: 0.5rem 0.75rem; vertical-align: top; }
+.prose-doc hr { margin: 2rem 0; border-color: var(--line); }
+.prose-doc > :first-child + p code { background: none; border: none; padding: 0; }
+
+
+@layer components {
+  /* A code block. `data-lang` renders a small label in the corner. */
+  .code-block {
+    @apply relative overflow-x-auto rounded-lg border border-line bg-panel-2 p-4 font-mono text-[13px] leading-6 text-text-2;
+  }
+  .code-block[data-lang]::before {
+    content: attr(data-lang);
+    @apply absolute top-2 right-3 font-mono text-[10px] tracking-widest text-faint uppercase;
+  }
+  .tok-key { @apply text-accent; }
+  .tok-str { @apply text-success; }
+  .tok-num { @apply text-warning; }
+  .tok-com { @apply text-faint; }
+  .tok-fn { @apply text-violet; }
+}
+
+/* ── Motion preferences ───────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Print: a board should come off a browser looking like a board ─────── */
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; color: #000; }
+}

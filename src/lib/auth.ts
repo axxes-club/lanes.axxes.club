@@ -15,6 +15,19 @@ const parentDomain = (cookieDomain || "axxes.club").replace(/^\./, "")
 // Central AXXES sign-in; when unset the app uses its own sign-in page
 export const HANDSHAKE_URL = process.env.HANDSHAKE_URL?.replace(/\/$/, "") || null
 
+/**
+ * Origins trusted in addition to the real domains.
+ *
+ * `baseURL` is already in the list, so Lanes on its own is fine. This is for
+ * the case where sign-in is completed on one port and the session is read on
+ * another — a local Handshake on :3101 returning someone to Lanes on :3200.
+ * Empty unless EXTRA_TRUSTED_ORIGINS is set, so production is unchanged.
+ */
+const extraOrigins = (process.env.EXTRA_TRUSTED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
@@ -23,6 +36,7 @@ export const auth = betterAuth({
     `https://${parentDomain}`,
     `https://*.${parentDomain}`,
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    ...extraOrigins,
   ],
   advanced: cookieDomain ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } } : undefined,
   database: drizzleAdapter(db, { provider: "pg", schema }),

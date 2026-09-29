@@ -59,3 +59,5 @@ export * from "./integrations"
 export * from "./projects"
 // Enterprise delivery: roles, sprints, poker, integrations, API
 export * from "./lanes-enterprise"
+// Per-person board state: stars, saved views, cross-product card links
+export * from "./lanes-platform"

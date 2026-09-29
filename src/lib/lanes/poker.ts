@@ -11,24 +11,10 @@ import { requireBoardPermission } from "./board-access"
  * participant has cast theirs, or the facilitator reveals. Without it the
  * first hand raised anchors the room, and the whole session is theatre.
  */
-export type DeckName = "fibonacci" | "modified_fibonacci" | "powers_of_two" | "t_shirt"
+import { DECKS, deckFor, isDeck, type DeckName } from "./decks"
 
-export const DECKS: Record<DeckName, string[]> = {
-  // The half-step is left out on purpose in some teams because it produces
-  // arguments; here the common decks are distinct enough to be worth having.
-  fibonacci: ["0", "1", "2", "3", "5", "8", "13", "21", "34", "55", "89", "?"],
-  modified_fibonacci: ["0", "½", "1", "2", "3", "5", "8", "13", "20", "40", "100", "?"],
-  powers_of_two: ["0", "1", "2", "4", "8", "16", "32", "64", "?", "", "", ""],
-  t_shirt: ["XS", "S", "M", "L", "XL", "XXL", "?", "", "", "", "", ""],
-}
-
-export function isDeck(name: string): name is DeckName {
-  return Object.prototype.hasOwnProperty.call(DECKS, name)
-}
-
-export function deckFor(name: string): string[] {
-  return isDeck(name) ? DECKS[name] : DECKS.fibonacci
-}
+// Re-exported so callers that already import from `poker` keep working.
+export { DECKS, deckFor, isDeck, DECK_LABELS, type DeckName } from "./decks"
 
 /** Who is estimating: board members, plus everyone in the tenant as default. */
 async function participants(boardId: string) {

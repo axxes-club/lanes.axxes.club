@@ -1,5 +1,5 @@
 import "server-only"
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 
@@ -9,37 +9,60 @@ import { db, schema } from "@/lib/db"
  * Same shape as the other AXXES products so one mental model covers all of
  * them: `lnk_<id>_<secret>`, secret shown once, stored only as a SHA-256.
  *
- * The id is located by position, not by splitting on "_": base64url emits "_"
- * as a character, so roughly half of all secrets contain one and a split
- * would reject the tokens that happened to be minted with it.
  */
 const SECRET_BYTES = 32
-const ID_BYTES = 9
-const ID_HEX_LENGTH = ID_BYTES * 2
+/** A UUID with its dashes stripped: 32 hex characters. */
+const ID_LENGTH = 32
 export const TOKEN_PREFIX = "lnk"
 
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex")
 }
 
-export function newToken() {
-  const id = randomBytes(ID_BYTES).toString("hex")
-  const secret = randomBytes(SECRET_BYTES).toString("base64url")
-  return { id, secret, token: `${TOKEN_PREFIX}_${id}_${secret}`, hash: sha256(secret) }
+/**
+ * `api_tokens.id` is a uuid column, so the id has to be a uuid.
+ *
+ * This used to generate 18 hex characters from 9 random bytes, which looked
+ * equivalent and was not: every insert failed with `invalid input syntax for
+ * type uuid`, so no token had ever been created — the table had zero rows and
+ * the whole authenticated API was unreachable. It is a good illustration of
+ * why "it type-checks" is not the same as "it works": Drizzle would happily
+ * bind a string into a uuid column and let the database say no.
+ *
+ * The uuid is embedded dashless so the token stays a fixed-shape string, and
+ * the dashes are put back when it is read.
+ */
+function toTokenId(uuid: string): string {
+  return uuid.replaceAll("-", "")
 }
 
+function fromTokenId(id: string): string | null {
+  if (id.length !== ID_LENGTH || !/^[0-9a-f]{32}$/.test(id)) return null
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`
+}
+
+export function newToken() {
+  const id = randomUUID()
+  const secret = randomBytes(SECRET_BYTES).toString("base64url")
+  return { id, secret, token: `${TOKEN_PREFIX}_${toTokenId(id)}_${secret}`, hash: sha256(secret) }
+}
+
+/**
+ * The id is located by position, not by splitting on "_": base64url emits "_"
+ * as a character, so roughly half of all secrets contain one and a split
+ * would reject the tokens that happened to be minted with it.
+ */
 export function tokenIdFrom(token: string): string | null {
   const head = `${TOKEN_PREFIX}_`
   if (!token.startsWith(head)) return null
   const rest = token.slice(head.length)
-  const id = rest.slice(0, ID_HEX_LENGTH)
-  if (id.length !== ID_HEX_LENGTH || !/^[0-9a-f]+$/.test(id)) return null
-  if (rest[ID_HEX_LENGTH] !== "_") return null
-  return rest.slice(ID_HEX_LENGTH + 1).length > 0 ? id : null
+  if (rest[ID_LENGTH] !== "_") return null
+  if (rest.length <= ID_LENGTH + 1) return null
+  return fromTokenId(rest.slice(0, ID_LENGTH))
 }
 
 export function secretFrom(token: string): string {
-  return token.slice(`${TOKEN_PREFIX}_`.length + ID_HEX_LENGTH + 1)
+  return token.slice(`${TOKEN_PREFIX}_`.length + ID_LENGTH + 1)
 }
 
 export function secretMatches(candidate: string, storedHash: string): boolean {

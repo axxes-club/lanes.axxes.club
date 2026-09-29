@@ -1,6 +1,7 @@
 import "server-only"
 import { and, eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
+import { fail } from "./api-response"
 import { db, schema } from "@/lib/db"
 import { ALL_PERMISSIONS, type BoardAccess } from "./board-access"
 import { can, type Permission } from "./permissions"
@@ -96,14 +97,19 @@ async function boardAccessFor(
   return { role, elevated, permissions: (p: Permission) => elevated || can(role, p) }
 }
 
-/** Standard failures, so every endpoint answers the same way. */
+/**
+ * Standard failures, so every endpoint answers the same way.
+ *
+ * These take a bare `Request` because the envelope includes a request id,
+ * which is what a consumer quotes in a bug report. Endpoints that already
+ * have the request should call `fail()` directly.
+ */
 export function apiError(message: string, status: number, hint?: string) {
-  return NextResponse.json({ error: message, ...(hint ? { hint } : {}) }, { status })
+  return fail(new Request("https://api.invalid"), message, status, status === 403 ? "forbidden" : "bad_request", hint)
 }
 
-export const unauthorized = () =>
-  apiError("Missing or invalid API token.", 401, "Send it as 'Authorization: Bearer <token>'.")
+export const unauthorized = (req?: Request) =>
+  (req ? fail(req, "Missing or invalid API token.", 401, "unauthorized", "Send it as 'Authorization: Bearer <token>'.") : apiError("Missing or invalid API token.", 401, "Send it as 'Authorization: Bearer <token>'."))
 
-export function forbidden(message: string, hint?: string) {
-  return apiError(message, 403, hint)
-}
+export const forbidden = (message: string, hint?: string, req?: Request) =>
+  req ? fail(req, message, 403, "forbidden", hint) : apiError(message, 403, hint)

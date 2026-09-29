@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { BoardClient } from "@/components/lanes/board-client"
 import { requireContext } from "@/lib/context"
 import { getBoard } from "@/lib/lanes/data"
 import { boardChrome } from "@/lib/lanes/board-view"
@@ -26,10 +27,13 @@ export default async function BoardPage({
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] flex-col lg:h-[calc(100dvh-9rem)]">
-      <BoardToolbar boardId={board.id} boardName={board.name} chrome={chrome} />
-      <div className="min-h-0 flex-1">
-        <Board board={board} me={ctx.userId} can={chrome.permissions} focusCard={focusCard ?? null} />
-      </div>
+      <BoardClient
+        board={board}
+        me={ctx.userId}
+        can={chrome.permissions}
+        focusCard={focusCard ?? null}
+        chrome={chrome}
+      />
     </div>
   )
 }

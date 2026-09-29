@@ -1,7 +1,7 @@
 import "server-only"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
-import { recordSource, type RecordKind } from "@/lib/axxes/records"
+import { recordSource, type RecordKind } from "@/lib/axxes/record-kinds"
 
 /**
  * The links on a card, with the referenced record re-read live.
@@ -79,10 +79,9 @@ async function readLive(
   kind: RecordKind,
   recordId: string,
 ): Promise<{ label: string; detail: string | null } | null> {
-  const { searchRecords } = await import("@/lib/axxes/records")
-  // The search is tenant-scoped, so matching the id here also proves the
-  // record is one this workspace can see.
-  const hits = await searchRecords(tenantId, kind, "", 200).catch(() => [])
-  const hit = hits.find((h) => h.id === recordId)
+  const { readRecord } = await import("@/lib/axxes/records")
+  // A direct tenant-scoped read by id. It also *proves* the record is one
+  // this workspace can see, which is the point of scoping it.
+  const hit = await readRecord(tenantId, kind, recordId).catch(() => null)
   return hit ? { label: hit.label, detail: hit.detail } : null
 }

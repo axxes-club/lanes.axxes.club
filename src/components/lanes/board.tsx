@@ -35,6 +35,7 @@ import {
 } from "@/lib/lanes/actions"
 import { CardPanel } from "./card-panel"
 import { ListView } from "./list-view"
+import { ShortcutsSheet } from "@/components/shortcuts-sheet"
 import { PokerPanel } from "./poker-panel"
 import { ContextMenu, type MenuItem } from "./context-menu"
 
@@ -64,12 +65,18 @@ export function Board({
   me,
   can,
   focusCard = null,
+  starred = false,
+  onStarChange,
 }: {
   board: BoardT
   me: string
   can: Record<string, boolean>
   focusCard?: string | null
+  /** The board's star, so `s` can toggle it from the keyboard. */
+  starred?: boolean
+  onStarChange?: (next: boolean) => void
 }) {
+  const chromeStar = starred
   const router = useRouter()
   const [pending, start] = useTransition()
   const [lists, setLists] = useState(board.lists)
@@ -81,6 +88,11 @@ export function Board({
   // re-opening the same card and trapping the panel shut.
   const [openedFocus, setOpenedFocus] = useState<string | null>(null)
   const [pokerCard, setPokerCard] = useState<string | null>(null)
+  const [sheet, setSheet] = useState(false)
+  // The card the keyboard is pointing at. Kept separate from `openCard` so
+  // arrow keys can move a selection without opening anything — you scan down
+  // a list, then press enter.
+  const [selected, setSelected] = useState<string | null>(null)
   // The view lives in the URL so a filtered board is a bookmark, and so the
   // back button moves between views rather than leaving the board.
   const [view, setView] = useState<"board" | "list">("board")
@@ -142,9 +154,108 @@ export function Board({
   }
   const cardsIn = (listId: string) => cards.filter((c) => c.listId === listId).sort((a, b) => a.position - b.position)
 
+  /**
+   * The order J and K walk.
+   *
+   * Lane by lane, left to right, top to bottom within each — the order a
+   * person reads a board, not the order it happens to be in the database.
+   * Filters are respected, so walking a filtered board does not land on
+   * something the person cannot currently see.
+   */
+  const walkable = useMemo(
+    () => lists.flatMap((l) => cardsIn(l.id).filter(visible)).map((c) => c.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lists, cards, q, label, person, due],
+  )
+
+  const step = (direction: 1 | -1) => {
+    if (!walkable.length) return
+    const at = selected ? walkable.indexOf(selected) : -1
+    const next = at === -1 ? (direction === 1 ? 0 : walkable.length - 1) : at + direction
+    setSelected(walkable[Math.max(0, Math.min(walkable.length - 1, next))] ?? null)
+  }
+
+  // Scroll the selection into view: keyboard navigation that moves a
+  // highlight off-screen is worse than no navigation.
+  useEffect(() => {
+    if (!selected) return
+    document.querySelector<HTMLElement>(`[data-card-id="${selected}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }, [selected])
+
   const run = (fn: () => Promise<unknown>) => start(async () => {
     await fn()
     router.refresh()
+  })
+
+  /**
+   * The board's keyboard layer.
+   *
+   * Two guards, both of which matter more than the shortcuts themselves:
+   * a keystroke in a text field is text, and a keystroke with a modifier
+   * held belongs to the browser or to the palette. Without those, typing a
+   * description containing "n" would create cards.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (isTypingTarget(e.target)) return
+      if (openCard || pokerCard) return
+
+      const clearFilters = () => {
+        if (!filtering) return false
+        setQ(""); setLabel(""); setPerson(""); setDue("all")
+        return true
+      }
+
+      switch (e.key) {
+        case "j": case "J": e.preventDefault(); step(1); break
+        case "k": case "K": e.preventDefault(); step(-1); break
+        case "Enter":
+          if (selected) { e.preventDefault(); setOpenCard(selected) }
+          break
+        case "Escape":
+          // Esc clears a filter before it does anything else, so you can
+          // get out of a filtered view without reaching for the mouse.
+          if (selected) setSelected(null)
+          else if (!clearFilters()) setSelected(null)
+          break
+        case "?":
+          e.preventDefault(); setSheet(true); break
+        case "v": case "V":
+          e.preventDefault(); switchView(view === "board" ? "list" : "board"); break
+        case "s": case "S":
+          e.preventDefault(); onStarChange?.(!chromeStar); break
+        case "x": case "X":
+          if (clearFilters()) e.preventDefault(); break
+        case "n": case "N": {
+          e.preventDefault()
+          const list = lists[0]
+          if (list && may("card.create")) {
+            const title = window.prompt(`New card in ${list.name}`)
+            if (title?.trim()) run(() => createCard(board.id, list.id, title.trim()))
+          }
+          break
+        }
+        case "l": case "L": {
+          e.preventDefault()
+          if (may("card.create")) {
+            const name = window.prompt("Lane name")
+            if (name?.trim()) run(() => createList(board.id, name.trim()))
+          }
+          break
+        }
+        case "e": case "E": {
+          e.preventDefault()
+          if (may("board.update")) {
+            const next = window.prompt("Board name", board.name)
+            if (next?.trim() && next.trim() !== board.name) run(() => renameBoard(board.id, next.trim()))
+          }
+          break
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
   })
 
   // ── Drag and drop ──
@@ -329,6 +440,8 @@ export function Board({
                 onAdd={(title) => run(() => createCard(board.id, list.id, title))}
                 canAdd={may("card.create")}
                 canSort={draggable}
+                selected={selected}
+                onSelect={(id) => { setSelected(id); setOpenCard(id) }}
               />
             ))}
           </SortableContext>
@@ -338,8 +451,32 @@ export function Board({
       </DndContext>
       )}
 
+      {sheet && <ShortcutsSheet open onClose={() => setSheet(false)} />}
+
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
-      {openCard && <CardPanel cardId={openCard} board={board} me={me} onClose={() => setOpenCard(null)} onChanged={() => router.refresh()} />}
+      {openCard && (
+        <CardPanel
+          cardId={openCard}
+          board={board}
+          me={me}
+          can={can}
+          onClose={() => {
+            setOpenCard(null)
+            // Return the highlight where the panel was, so a person who
+            // pressed escape to go back lands on the card they were reading.
+            setSelected(openCard)
+          }}
+          onNavigate={(direction) => {
+            const at = walkable.indexOf(openCard)
+            const next = walkable[at + direction]
+            if (next) {
+              setOpenCard(next)
+              setSelected(next)
+            }
+          }}
+          onChanged={() => router.refresh()}
+        />
+      )}
       {pokerCard && (
         <PokerPanel
           boardId={board.id}
@@ -355,6 +492,7 @@ export function Board({
 
 function Lane({
   list, cards, visible, labelsById, peopleById, onOpen, onCardMenu, onListMenu, onAdd, canAdd, canSort,
+  selected, onSelect,
 }: {
   list: ListT
   cards: CardT[]
@@ -369,6 +507,10 @@ function Lane({
   canAdd: boolean
   /** card.move — whether the lane header is a drag handle. */
   canSort: boolean
+  /** The card the keyboard is pointing at. */
+  selected: string | null
+  /** Enter on a highlighted card. */
+  onSelect: (id: string) => void
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" } })
   const [adding, setAdding] = useState(false)
@@ -410,7 +552,17 @@ function Lane({
       <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
           {cards.map((card) => (
-            <SortableCard key={card.id} card={card} hidden={!visible(card)} labelsById={labelsById} peopleById={peopleById} onOpen={onOpen} onMenu={onCardMenu} />
+            <SortableCard
+              key={card.id}
+              card={card}
+              hidden={!visible(card)}
+              labelsById={labelsById}
+              peopleById={peopleById}
+              onOpen={onOpen}
+              onMenu={onCardMenu}
+              selected={selected}
+              onSelect={onSelect}
+            />
           ))}
           {cards.length > 0 && shown.length === 0 && <p className="px-1 py-2 text-xs text-muted">No matching cards</p>}
         </div>
@@ -451,6 +603,10 @@ function SortableCard({ card, hidden, ...rest }: {
   peopleById: Map<string, PersonT>
   onOpen: (id: string) => void
   onMenu: (c: CardT, x: number, y: number) => void
+  /** The card the keyboard is pointing at, highlighted with a ring. */
+  selected: string | null
+  /** Enter, or a click: open it. */
+  onSelect: (id: string) => void
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: card.id, data: { type: "card" } })
   if (hidden) return <div ref={setNodeRef} className="hidden" />
@@ -461,10 +617,15 @@ function SortableCard({ card, hidden, ...rest }: {
       {...attributes}
       {...listeners}
       data-card={card.key}
-      onClick={() => rest.onOpen(card.id)}
+      onClick={() => {
+        rest.onSelect(card.id)
+      }}
       onKeyDown={(e) => { if (e.key === "Enter") rest.onOpen(card.id) }}
       onContextMenu={(e) => { e.preventDefault(); rest.onMenu(card, e.clientX, e.clientY) }}
-      className={`select-none ${isDragging ? "opacity-30" : ""}`}
+      data-card-id={card.id}
+      className={`select-none rounded-lg ${isDragging ? "opacity-30" : ""} ${
+        rest.selected === card.id ? "ring-2 ring-accent ring-offset-2 ring-offset-panel" : ""
+      }`}
     >
       <CardTile card={card} labelsById={rest.labelsById} peopleById={rest.peopleById} />
     </div>
@@ -508,6 +669,12 @@ function CardTile({ card, labelsById, peopleById, overlay }: { card: CardT; labe
       </div>
     </article>
   )
+}
+
+/** True when focus is in a field, so a letter key means text, not a command. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
 }
 
 function AddLane({ onAdd }: { onAdd: (name: string) => void }) {

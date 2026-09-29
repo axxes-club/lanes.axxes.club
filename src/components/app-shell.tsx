@@ -31,7 +31,9 @@ import type { Membership } from "@/lib/context"
  * about the screen, not about the workspace.
  */
 
-const SIDEBAR_KEY = "lanes.sidebar"
+// The same key every AXXES rail reads, so the rail is already the width the
+// person last used in any other product when they arrive here.
+const SIDEBAR_KEY = "axxes:sidebar-collapsed"
 
 export type ShellNav = { href: string; label: string; Icon: typeof IconBoard }
 
@@ -60,7 +62,7 @@ export function AppShell({
 
   useEffect(() => {
     try {
-      setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "collapsed")
+      setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1")
     } catch {
       /* private browsing: the default width is fine */
     }
@@ -72,11 +74,25 @@ export function AppShell({
     const next = !collapsed
     setCollapsed(next)
     try {
-      localStorage.setItem(SIDEBAR_KEY, next ? "collapsed" : "expanded")
+      localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0")
     } catch {
       /* ignore */
     }
   }
+
+  // "[" collapses the rail, matching every other AXXES product.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey) return
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return
+      e.preventDefault()
+      toggle()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsed])
 
   const active = (item: ShellNav) => pathname === item.href || pathname.startsWith(item.href + "/")
 
@@ -174,9 +190,25 @@ export function AppShell({
           type="button"
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-[68px] hidden size-6 place-items-center rounded-full border border-line bg-panel text-muted transition hover:text-text lg:grid"
+          title={collapsed ? "Expand sidebar  [" : "Collapse sidebar  ["}
+          className="absolute -right-3 top-[68px] hidden size-6 place-items-center rounded-full border border-line bg-panel text-muted shadow-sm transition hover:text-text lg:grid"
         >
-          <span className="text-[10px] leading-none">{collapsed ? "›" : "‹"}</span>
+          {/* The same panel glyph every AXXES rail uses, so the control reads
+              identically wherever the app is opened. */}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-4"
+            aria-hidden="true"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M9 3v18" />
+            {collapsed && <path d="m16 15-3-3 3-3" />}
+          </svg>
         </button>
       </aside>
 

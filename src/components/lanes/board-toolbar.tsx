@@ -25,10 +25,13 @@ export function BoardToolbar({
   boardId,
   boardName,
   chrome,
+  onStarChange,
 }: {
   boardId: string
   boardName: string
   chrome: BoardChrome
+  /** Kept in one place so the button and the `s` shortcut cannot disagree. */
+  onStarChange: (next: boolean) => void
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -150,13 +153,7 @@ export function BoardToolbar({
             aria-pressed={chrome.starred}
             aria-label={chrome.starred ? `Unstar ${boardName}` : `Star ${boardName}`}
             title={chrome.starred ? "Unstar" : "Star this board"}
-            onClick={() => {
-              const next = !chrome.starred
-              start(async () => {
-                await setStar(boardId, next)
-                router.refresh()
-              })
-            }}
+            onClick={() => onStarChange(!chrome.starred)}
             className={cx("btn-icon-sm btn-ghost", chrome.starred && "text-warning")}
           >
             <IconStar size={15} className={chrome.starred ? "fill-current" : ""} />

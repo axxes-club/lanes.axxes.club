@@ -213,12 +213,31 @@ export async function starredBoards(
   tenantId: string,
   userId: string,
 ): Promise<{ id: string; name: string; color: string | null }[]> {
-  return db
-    .selectDistinct({ id: s.projects.id, name: s.projects.name, color: s.projects.color })
+  // DISTINCT plus an ORDER BY on a column that is not in the select list is
+  // rejected by Postgres (42P10, "for SELECT DISTINCT, ORDER BY expressions
+  // must appear in select list"), and this query did exactly that: it selected
+  // id/name/color and ordered by projects.updated_at. That made /dashboard a
+  // 500 for anyone who had ever starred a board, which is why it looked fine
+  // in development against an empty board and broke in production the moment
+  // the first star existed.
+  //
+  // updatedAt is selected and dropped rather than the DISTINCT removed: the
+  // DISTINCT is belt-and-braces even though (board_id, user_id) is the primary
+  // key and cannot duplicate. Keeping it means the ordering survives if that
+  // key is ever relaxed.
+  const rows = await db
+    .selectDistinct({
+      id: s.projects.id,
+      name: s.projects.name,
+      color: s.projects.color,
+      updatedAt: s.projects.updatedAt,
+    })
     .from(s.boardStars)
     .innerJoin(s.projects, eq(s.projects.id, s.boardStars.boardId))
     .where(and(eq(s.boardStars.userId, userId), eq(s.projects.tenantId, tenantId), isNull(s.projects.deletedAt)))
     .orderBy(desc(s.projects.updatedAt))
+
+  return rows.map(({ id, name, color }) => ({ id, name, color }))
 }
 
 /** Star or unstar. The primary key makes this idempotent, not last-write-wins. */

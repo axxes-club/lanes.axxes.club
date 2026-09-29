@@ -1,6 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { cx, Kbd } from "@/components/ui"
+import { LinkedRecords } from "./link-picker"
+import { IconArrowLeft, IconArrowRight, IconClose, IconLink } from "@/components/icons"
 import type { BoardT, CardDetailT, Priority } from "@/lib/lanes/types"
 import {
   addChecklist,
@@ -17,9 +21,37 @@ import {
 } from "@/lib/lanes/actions"
 
 const PRIORITIES: Priority[] = ["urgent", "high", "medium", "low"]
+
+/** True when focus is in a field, so a letter key means text, not a command. */
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+}
 const since = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
 
-export function CardPanel({ cardId, board, me, onClose, onChanged }: { cardId: string; board: BoardT; me: string; onClose: () => void; onChanged: () => void }) {
+export function CardPanel({
+  cardId,
+  board,
+  me,
+  onClose,
+  onChanged,
+  onNavigate,
+  can = {},
+}: {
+  cardId: string
+  board: BoardT
+  me: string
+  onClose: () => void
+  onChanged: () => void
+  /**
+   * Move to another card without closing and reopening the panel.
+   * Takes a direction, not an id: the panel does not know the list order,
+   * and making it sort the board to work out "the next one" would mean two
+   * copies of the ordering rule.
+   */
+  onNavigate?: (direction: 1 | -1) => void
+  can?: Record<string, boolean>
+}) {
   const [card, setCard] = useState<CardDetailT | null>(null)
   const [title, setTitle] = useState("")
   const [desc, setDesc] = useState("")
@@ -38,10 +70,24 @@ export function CardPanel({ cardId, board, me, onClose, onChanged }: { cardId: s
 
   useEffect(() => {
     reload()
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") return onClose()
+      // Arrow keys move between cards, the way every inbox worth using does.
+      // Never while typing: a person editing a description with the arrow
+      // keys should not have the panel jump out from under them.
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !isTyping(e.target)) {
+        e.preventDefault()
+        onNavigate?.(e.key === "ArrowDown" ? 1 : -1)
+      }
+    }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [reload, onClose])
+  }, [reload, onClose, onNavigate])
+
+  const copyLink = () => {
+    const url = `${location.origin}/dashboard/b/${board.id}?card=${cardId}`
+    navigator.clipboard?.writeText(url)
+  }
 
   // Every mutation: save, then re-read the card and refresh the board behind it
   const act = async (fn: () => Promise<unknown>) => {
@@ -62,19 +108,37 @@ export function CardPanel({ cardId, board, me, onClose, onChanged }: { cardId: s
 
   return (
     <Shell onClose={onClose}>
-      <div className="flex items-center gap-2 border-b border-line px-6 py-3 text-xs text-muted">
-        <span className="font-mono">{card.key}</span>
-        <span>in</span>
-        <select
-          value={card.listId}
-          onChange={(e) => act(() => moveCard(card.id, e.target.value, 0))}
-          className="rounded-md border border-line bg-panel-2 px-2 py-1 text-text"
-          aria-label="Lane"
-        >
-          {board.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-        {list?.isDoneList && <span className="text-emerald-400">✓ Done</span>}
-        <button type="button" className="ml-auto rounded px-2 py-1 hover:bg-panel-2 hover:text-text" onClick={onClose} aria-label="Close">✕</button>
+      <div className="flex items-center gap-2 border-b border-line px-6 py-2.5 text-xs text-muted">
+        <span className="font-mono text-text-2">{card.key}</span>
+        {onNavigate && (
+          <span className="flex items-center gap-0.5">
+            <Kbd><IconArrowLeft size={9} /></Kbd>
+            <Kbd><IconArrowRight size={9} /></Kbd>
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1">
+          <select
+            value={card.listId}
+            onChange={(e) => act(() => moveCard(card.id, e.target.value, 0))}
+            className="rounded-md border border-line bg-panel-2 px-2 py-1 text-text"
+            aria-label="Lane"
+          >
+            {board.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          {list?.isDoneList && <span className="text-success">✓ Done</span>}
+          <button
+            type="button"
+            onClick={copyLink}
+            className="btn-ghost btn-icon-sm"
+            title="Copy a link to this card"
+            aria-label="Copy a link to this card"
+          >
+            <IconLink size={13} />
+          </button>
+          <button type="button" onClick={onClose} className="btn-ghost btn-icon-sm" aria-label="Close">
+            <IconClose size={13} />
+          </button>
+        </span>
       </div>
 
       <div className="grid flex-1 gap-8 overflow-y-auto p-6 md:grid-cols-[1fr_220px]">
@@ -101,9 +165,11 @@ export function CardPanel({ cardId, board, me, onClose, onChanged }: { cardId: s
             />
           </section>
 
+          <LinkedRecords cardId={card.id} links={card.links} canEdit={can["card.update"] !== false} />
+
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted">Checklists</h3>
+              <h3 className="text-xs font-medium tracking-wider text-muted uppercase">Checklists</h3>
               <button type="button" className="text-xs text-accent hover:underline" onClick={() => act(() => addChecklist(card.id, "Checklist"))}>+ Add checklist</button>
             </div>
             {card.checklists.map((cl) => {

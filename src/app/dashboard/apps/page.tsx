@@ -1,5 +1,6 @@
 import { requireContext } from "@/lib/context"
-import { recordCounts, RECORD_SOURCES } from "@/lib/axxes/records"
+import { recordCounts } from "@/lib/axxes/records"
+import { RECORD_SOURCES } from "@/lib/axxes/record-kinds"
 import { SUITE } from "@/lib/axxes/suite"
 import { PageHeader, Section } from "@/components/ui"
 import { SuiteCard } from "@/components/product-switcher"

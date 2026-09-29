@@ -169,8 +169,11 @@ export async function getCardDetail(tenantId: string, cardId: string, viewerId: 
   const total = items.length
   const done = items.filter((i) => i.isCompleted).length
 
+  const { linksForCard } = await import("./link-data")
+
   return {
     ...toCard(card, keyPrefix(project.settings, project.name), labels, members, { total, done }, comments.length),
+    links: await linksForCard(tenantId, cardId),
     checklists: checklists.map((cl) => ({
       id: cl.id,
       title: cl.title,

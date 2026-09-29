@@ -1,61 +1,42 @@
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm"
 import "server-only"
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
+import { recordSource, type RecordKind } from "./record-kinds"
 
 /**
- * Cross-product records.
+ * Reading records from the rest of the AXXES suite.
  *
  * Because every AXXES app reads the same Postgres database, a card in Lanes
- * can point at a real customer, a real stock item or a real order without an
- * integration, an OAuth dance or a sync job. The link is a foreign key into
- * a sibling app's table; the row is the same row that app is looking at.
+ * can point at a real customer, a real order or a real venue without an
+ * integration, an OAuth dance or a sync job. The link is a reference into a
+ * sibling app's table, and the row is the same row that app is looking at.
  *
- * The registry below is the only place that knows which tables are safe to
- * read and which column is the human label. Everything else — the picker, the
- * card panel, the command palette — is driven from it, so adding a record
- * type to the suite is one entry.
+ * The *registry* — which kinds exist and where they live — lives in
+ * `./record-kinds`, which has no database import, because the card panel's
+ * picker is a client component and cannot import a module that reaches for
+ * the database. This file is the server half: how to read one.
  *
  * Two rules protect the rest of the suite:
  *
  *   1. Every query is scoped to the tenant, always. A board in one workspace
  *      can never surface a record from another, even by guessing an id.
- *   2. Only tables that are safe to read cross-product are listed. Anything
- *      holding a secret or a payment instrument does not belong here.
+ *   2. Only tables that are safe to read cross-product are listed here.
+ *      Anything holding a secret or a payment instrument does not belong.
  */
 
-export type RecordKind = "contact" | "order" | "event" | "product" | "venue" | "supplier"
+export type { RecordKind, RecordSource } from "./record-kinds"
+export { recordSource } from "./record-kinds"
 
-export type RecordSource = {
+export type LinkedRecord = {
   kind: RecordKind
-  /** Product name, shown next to the record. */
   product: string
-  /** The record's own URL in the app that owns it. */
-  href: (id: string) => string
-  /** Columns that make up the human label, in order. */
-  label: string[]
-  /** Extra columns worth showing in a picker or a card panel. */
-  fields: string[]
-  /** A noun, for "Link a contact". */
-  noun: string
+  id: string
+  label: string
+  href: string
+  detail: string | null
 }
 
-export const RECORD_SOURCES: RecordSource[] = [
-  { kind: "contact", product: "Members", noun: "contact", href: (id) => `https://members.axxes.club/c/${id}`, label: ["first_name", "last_name"], fields: ["email", "company"] },
-  { kind: "order", product: "Ledger", noun: "order", href: (id) => `https://ledger.axxes.club/orders/${id}`, label: ["order_number"], fields: ["status", "total"] },
-  { kind: "event", product: "Signal", noun: "event", href: (id) => `https://signal.axxes.club/events/${id}`, label: ["name"], fields: ["starts_at", "status"] },
-  { kind: "product", product: "Invn", noun: "product", href: (id) => `https://inventree.axxes.club/product/${id}`, label: ["name"], fields: ["sku", "quantity", "status"] },
-  { kind: "venue", product: "Invn", noun: "venue", href: (id) => `https://inventree.axxes.club/venue/${id}`, label: ["name"], fields: ["city", "capacity"] },
-  { kind: "supplier", product: "Invn", noun: "supplier", href: (id) => `https://inventree.axxes.club/supplier/${id}`, label: ["name"], fields: ["email", "is_active"] },
-]
-
-export function recordSource(kind: RecordKind): RecordSource | undefined {
-  return RECORD_SOURCES.find((r) => r.kind === kind)
-}
-
-/**
- * The tables behind each kind, kept out of RECORD_SOURCES so that file stays
- * importable from client components (it has no Drizzle or DB dependency).
- */
+/** The table behind each kind. */
 function tableFor(kind: RecordKind) {
   switch (kind) {
     case "contact": return s.contacts
@@ -67,29 +48,34 @@ function tableFor(kind: RecordKind) {
   }
 }
 
-export type LinkedRecord = {
-  kind: RecordKind
-  product: string
-  id: string
-  label: string
-  href: string
-  detail: string | null
-}
-
 function display(value: unknown): string {
   if (value === null || value === undefined || value === "") return ""
-  if (value instanceof Date) return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  if (value instanceof Date) {
+    return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (typeof value === "number") {
-    // Order totals and money columns read better with a currency mark, and
-    // the rest of the suite formats money the same way.
-    return Number.isInteger(value) ? value.toLocaleString("en-US") : value.toLocaleString("en-US", { style: "currency", currency: "USD" })
+    // Money columns read better with a currency mark; the rest of the suite
+    // formats money the same way.
+    return Number.isInteger(value)
+      ? value.toLocaleString("en-US")
+      : value.toLocaleString("en-US", { style: "currency", currency: "USD" })
   }
   return String(value).replaceAll("_", " ")
 }
 
-/** Find records to link. With no query, the ten most recently touched. */
-export async function searchRecords(tenantId: string, kind: RecordKind, q = "", limit = 10): Promise<LinkedRecord[]> {
+/**
+ * Find records to link.
+ *
+ * With no query the most recently touched are returned, which is the useful
+ * default for "link the thing I just created in the other app".
+ */
+export async function searchRecords(
+  tenantId: string,
+  kind: RecordKind,
+  q = "",
+  limit = 10,
+): Promise<LinkedRecord[]> {
   const source = recordSource(kind)
   if (!source) return []
   const table = tableFor(kind) as unknown as Record<string, never>
@@ -109,7 +95,7 @@ export async function searchRecords(tenantId: string, kind: RecordKind, q = "", 
       ),
     )
     .orderBy(desc(cols("updatedAt") as never))
-    .limit(Math.min(20, Math.max(1, limit)))
+    .limit(Math.min(200, Math.max(1, limit)))
     .catch(() => [])) as Record<string, unknown>[]
 
   return rows.map((row) => {
@@ -123,8 +109,45 @@ export async function searchRecords(tenantId: string, kind: RecordKind, q = "", 
   })
 }
 
-/** A count per kind, so the link panel can say what there is to link. */
+/**
+ * One record by id, tenant-scoped.
+ *
+ * Used to re-read a linked record live when a card panel opens, so renaming a
+ * customer updates every card that references it with no sync job involved.
+ * Returns null for a record in another workspace, which is what "missing"
+ * should mean.
+ */
+export async function readRecord(
+  tenantId: string,
+  kind: RecordKind,
+  recordId: string,
+): Promise<LinkedRecord | null> {
+  const source = recordSource(kind)
+  if (!source) return null
+  const table = tableFor(kind) as unknown as Record<string, never>
+
+  const [row] = (await db
+    .select(table)
+    .from(table as never)
+    .where(
+      and(
+        eq(table["id"] as never, recordId as never),
+        eq(table["tenantId"] as never, tenantId as never),
+        isNull(table["deletedAt"] as never),
+      ),
+    )
+    .limit(1)
+    .catch(() => [])) as Record<string, unknown>[]
+
+  if (!row) return null
+  const label = source.label.map((c) => display(row[c])).filter(Boolean).join(" ") || recordId
+  const detail = source.fields.map((f) => display(row[f])).filter(Boolean).join(" · ")
+  return { kind, product: source.product, id: recordId, label, href: source.href(recordId), detail: detail || null }
+}
+
+/** A count per kind, so a panel can say what there is to link. */
 export async function recordCounts(tenantId: string): Promise<Partial<Record<RecordKind, number>>> {
+  const { RECORD_SOURCES } = await import("./record-kinds")
   const out: Partial<Record<RecordKind, number>> = {}
   await Promise.all(
     RECORD_SOURCES.map(async ({ kind }) => {
@@ -139,4 +162,3 @@ export async function recordCounts(tenantId: string): Promise<Partial<Record<Rec
   )
   return out
 }
-

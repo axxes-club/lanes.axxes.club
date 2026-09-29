@@ -35,7 +35,10 @@ export type BoardT = {
   people: PersonT[]
 }
 
+/** A card, plus everything the panel shows that is not on the card row. */
 export type CardDetailT = CardT & {
+  /** Records from the rest of the AXXES suite, re-read live on load. */
+  links: import("@/lib/lanes/link-data").CardLinkView[]
   checklists: { id: string; title: string; items: { id: string; text: string; done: boolean }[] }[]
   commentsList: { id: string; content: string; createdAt: string; author: PersonT | null; mine: boolean }[]
   activity: { id: string; type: string; description: string | null; createdAt: string; author: string | null }[]

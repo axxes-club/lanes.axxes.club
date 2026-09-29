@@ -34,6 +34,7 @@ import {
   updateList,
 } from "@/lib/lanes/actions"
 import { CardPanel } from "./card-panel"
+import { PokerPanel } from "./poker-panel"
 import { ContextMenu, type MenuItem } from "./context-menu"
 
 type Due = "all" | "overdue" | "week" | "none"
@@ -78,6 +79,7 @@ export function Board({
   // Track which deep link has been honoured, so a re-render does not keep
   // re-opening the same card and trapping the panel shut.
   const [openedFocus, setOpenedFocus] = useState<string | null>(null)
+  const [pokerCard, setPokerCard] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [label, setLabel] = useState<string>("")
   const [person, setPerson] = useState<string>("")
@@ -204,6 +206,9 @@ export function Board({
           children: (["urgent", "high", "medium", "low"] as const).map((p) => ({ label: p[0].toUpperCase() + p.slice(1), checked: card.priority === p, onSelect: () => run(() => updateCard(card.id, { priority: p })) })),
         },
         { label: "Copy link", onSelect: () => navigator.clipboard.writeText(`${location.origin}/dashboard/b/${board.id}?card=${card.id}`) },
+        ...(may("poker.facilitate") || may("poker.read")
+          ? [{ label: "Estimate with poker", onSelect: () => setPokerCard(card.id) } as MenuItem]
+          : []),
         { label: "Duplicate", onSelect: () => run(() => duplicateCard(card.id)) },
         { separator: true },
         { label: "Archive", onSelect: () => { dropCard(card.id); run(() => archiveCard(card.id)) } },
@@ -296,6 +301,15 @@ export function Board({
 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {openCard && <CardPanel cardId={openCard} board={board} me={me} onClose={() => setOpenCard(null)} onChanged={() => router.refresh()} />}
+      {pokerCard && (
+        <PokerPanel
+          boardId={board.id}
+          cardId={pokerCard}
+          cardTitle={cards.find((c) => c.id === pokerCard)?.title ?? null}
+          canFacilitate={may("poker.facilitate")}
+          onClose={() => setPokerCard(null)}
+        />
+      )}
     </div>
   )
 }

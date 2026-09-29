@@ -118,7 +118,11 @@ async function byKey(key: string, tenantId: string): Promise<Resolved | null> {
  */
 function keyExpression() {
   const project = schema.projects
-  return sql<string>`upper(coalesce(${project.settings}->>'keyPrefix', 'LN')) || '-' || lpad(
+  // The prefix is upper-cased and stripped of non-alphanumerics here for the
+  // same reason `prefix.ts` does it in JS. If the two disagree, a key written
+  // by one is invisible to the other — which is exactly what happened with a
+  // stored prefix of "API " before this was fixed.
+  return sql<string>`regexp_replace(upper(coalesce(${project.settings}->>'keyPrefix', 'LN')), '[^A-Z0-9]', '', 'g') || '-' || lpad(
     coalesce((${schema.projectCards.customFields}->>'seq')::int, 0)::text,
     greatest(coalesce((${project.settings}->>'keyPadding')::int, 2), 1),
     '0'

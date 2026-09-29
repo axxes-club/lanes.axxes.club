@@ -3,7 +3,7 @@ import { db, schema } from "@/lib/db"
 import { authenticate, forbidden, unauthorized } from "@/lib/lanes/api-auth"
 import { body, created, fail, ok, withHeaders } from "@/lib/lanes/api-response"
 import { rateLimit, retryAfterSeconds } from "@/lib/lanes/rate-limit"
-import { cardKey } from "@/lib/lanes/prefix"
+import { boardPrefix, cardKey } from "@/lib/lanes/prefix"
 import { template } from "@/lib/lanes/templates"
 
 export const dynamic = "force-dynamic"
@@ -149,7 +149,13 @@ export async function POST(req: Request) {
       description: typeof payload.description === "string" ? payload.description.slice(0, 2000) : null,
       color: typeof payload.color === "string" && /^#[0-9a-f]{6}$/i.test(payload.color) ? payload.color : chosen.accent,
       createdById: auth.userId,
-      settings: { keyPrefix: name.slice(0, 4).toUpperCase(), template: chosen.key },
+      // The prefix has to come from prefix.ts, not from a local slice. The
+      // route used to take `name.slice(0, 4)`, which for "API smoke 3" gives
+      // "API " — with a trailing space. JS normalised it away to "API" and
+      // SQL did not, so a card created over the API was returned as "API-01"
+      // by one lookup and could not be found by the other. One owner for the
+      // key format, always.
+      settings: { keyPrefix: boardPrefix(null, name), template: chosen.key },
     })
     .returning()
 

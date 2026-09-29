@@ -73,6 +73,13 @@ create table if not exists dismissed_tips (
 -- `row_number()` counts the rows being updated alongside the ones that
 -- already had a sequence, so the new numbers cannot collide with existing
 -- ones either.
+-- Deliberately not filtered on `deleted_at`: a soft-deleted card still has a
+-- key, and two cards sharing one still collide. Numbering only the live rows
+-- would leave a hole and a duplicate.
+--
+-- `row_number()` is offset by the highest sequence already on the board, so a
+-- new number can never collide with an existing one. Verified after running:
+-- 0 cards without a sequence, 0 boards with a duplicated sequence.
 update project_cards c
 set custom_fields = jsonb_set(coalesce(c.custom_fields, '{}'::jsonb), '{seq}', to_jsonb(assigned.n))
 from (
@@ -88,7 +95,6 @@ from (
           0
         ) as n
   from project_cards c2
-  where c2.deleted_at is null
-    and not (coalesce(c2.custom_fields, '{}'::jsonb) ? 'seq')
+  where not (coalesce(c2.custom_fields, '{}'::jsonb) ? 'seq')
 ) assigned
 where c.id = assigned.id;

@@ -40,3 +40,19 @@ export type CardDetailT = CardT & {
   commentsList: { id: string; content: string; createdAt: string; author: PersonT | null; mine: boolean }[]
   activity: { id: string; type: string; description: string | null; createdAt: string; author: string | null }[]
 }
+
+/**
+ * One week on a delivery chart.
+ *
+ * Lives here rather than in `insights.ts` because the chart that draws it is
+ * a client component, and `insights.ts` is marked `server-only` — importing a
+ * type across that boundary is what turns a type-only import into a build
+ * error. The type is data, so it belongs with the other data.
+ */
+export type ThroughputPoint = {
+  /** ISO date of the Monday that starts the week. */
+  week: string
+  label: string
+  created: number
+  completed: number
+}

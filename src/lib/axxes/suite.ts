@@ -39,6 +39,15 @@ export type SuiteProduct = {
   category: "work" | "commerce" | "audience" | "infrastructure"
 }
 
+/**
+ * Only products that actually exist belong here.
+ *
+ * This list had picked up Signal, Matrix and Ledger — apps that were planned,
+ * named, given a colour and a blurb, and never built. No repo, no DNS, no
+ * references anywhere else, and three dead tiles in the switcher that led
+ * nowhere. `tests/lib/suite-links.test.ts` now checks every href here resolves,
+ * so the next one has to be a real product rather than a good name.
+ */
 export const SUITE: SuiteProduct[] = [
   {
     key: "lanes",
@@ -73,57 +82,25 @@ export const SUITE: SuiteProduct[] = [
   },
   {
     key: "manifest",
-    name: "Manifest",
-    blurb: "The suite directory and shared data surface.",
-    href: "https://manifest-axxes.vercel.app",
-    accent: "#f59e0b",
-    glyph: "Mf",
+    // Named "Stock" in the catalog. Renamed to match: a switcher that says
+    // "Manifest" and a launcher that says "Stock" is two products to the user.
+    name: "Stock",
+    blurb: "Inventory operations on one honest ledger.",
+    // Was manifest-axxes.vercel.app, which 404s. The real host is this one —
+    // the same value the catalog row carries.
+    href: "https://manifest.axxes.club",
+    accent: "#c8ff3d",
+    glyph: "St",
     primary: true,
-    category: "infrastructure",
-  },
-  {
-    key: "inventree",
-    name: "Invn",
-    blurb: "Inventory, stock and purchasing.",
-    href: "https://inventree.axxes.club",
-    accent: "#10b981",
-    glyph: "Iv",
     category: "commerce",
   },
   {
     key: "nexus",
     name: "Nexus",
-    blurb: "The website and content platform.",
+    blurb: "Your team's knowledge base.",
     href: "https://nexus.axxes.club",
     accent: "#f472b6",
     glyph: "Nx",
-    category: "commerce",
-  },
-  {
-    key: "signal",
-    name: "Signal",
-    blurb: "Social publishing and analytics.",
-    href: "https://signal.axxes.club",
-    accent: "#38bdf8",
-    glyph: "Sg",
-    category: "audience",
-  },
-  {
-    key: "matrix",
-    name: "Matrix",
-    blurb: "Team chat, wired to your boards.",
-    href: "https://matrix.axxes.club",
-    accent: "#34d399",
-    glyph: "Mx",
-    category: "work",
-  },
-  {
-    key: "ledger",
-    name: "Ledger",
-    blurb: "Orders, invoicing and revenue.",
-    href: "https://ledger.axxes.club",
-    accent: "#fbbf24",
-    glyph: "Lg",
     category: "commerce",
   },
   {

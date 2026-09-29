@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   DndContext,
@@ -45,7 +45,29 @@ const collision: CollisionDetection = (args) => {
 }
 const PRIORITY_COLOR: Record<string, string> = { urgent: "#ef4444", high: "#f59e0b", medium: "transparent", low: "transparent" }
 
-export function Board({ board, me }: { board: BoardT; me: string }) {
+/**
+ * The board.
+ *
+ * `can` is a map of resolved permissions handed down from the server. It
+ * decides what the controls *look* like; the server actions decide what is
+ * actually allowed. A crafted request that skips the UI gets refused by the
+ * action, which is the only half of the rule that matters.
+ *
+ * `focusCard` opens a card directly. It exists because links into Lanes come
+ * from outside — search, insights, an AXXES app, a Slack message — and a
+ * deep link that lands on the board without opening the card is a dead end.
+ */
+export function Board({
+  board,
+  me,
+  can,
+  focusCard = null,
+}: {
+  board: BoardT
+  me: string
+  can: Record<string, boolean>
+  focusCard?: string | null
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [lists, setLists] = useState(board.lists)
@@ -53,6 +75,9 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
   const [openCard, setOpenCard] = useState<string | null>(null)
   const [dragging, setDragging] = useState<CardT | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  // Track which deep link has been honoured, so a re-render does not keep
+  // re-opening the same card and trapping the panel shut.
+  const [openedFocus, setOpenedFocus] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [label, setLabel] = useState<string>("")
   const [person, setPerson] = useState<string>("")
@@ -68,9 +93,21 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
     setName(board.name)
   }
 
+  useEffect(() => {
+    if (!focusCard || focusCard === openedFocus) return
+    if (!cards.some((c) => c.id === focusCard)) return
+    setOpenCard(focusCard)
+    setOpenedFocus(focusCard)
+  }, [focusCard, openedFocus, cards])
+
   const labelsById = useMemo(() => new Map(board.labels.map((l) => [l.id, l])), [board.labels])
   const peopleById = useMemo(() => new Map(board.people.map((p) => [p.id, p])), [board.people])
   const filtering = !!(q || label || person || due !== "all")
+
+  // One helper rather than a dozen `can["..."]` lookups in the JSX: it reads
+  // better and it is the single place a future permission change lands.
+  const may = (permission: string) => can[permission] !== false
+  const readOnly = !may("card.update")
 
   const visible = (c: CardT) => {
     if (q && !`${c.key} ${c.title} ${c.description ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false
@@ -89,7 +126,15 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
   })
 
   // ── Drag and drop ──
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  // Sensors are only attached when the person may actually move something.
+  // A read-only stakeholder still gets a keyboard-navigable board; they just
+  // cannot pick anything up, and a drag ghost they cannot drop is worse than
+  // no drag at all.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  const draggable = may("card.move")
   const listOf = (id: string) => (lists.some((l) => l.id === id) ? id : cards.find((c) => c.id === id)?.listId)
 
   const onDragStart = (e: DragStartEvent) => setDragging(cards.find((c) => c.id === e.active.id) ?? null)
@@ -181,16 +226,26 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-6rem)]">
+      {readOnly && (
+        <p className="no-print mb-3 rounded-lg border border-line bg-panel-2 px-3 py-2 text-xs text-muted">
+          You have read-only access to this board. Ask an owner for a role if you need to change anything.
+        </p>
+      )}
+
       {/* Header + filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="size-3 rounded-full" style={{ background: board.color ?? "var(--accent)" }} />
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => name.trim() && name !== board.name && run(() => renameBoard(board.id, name))}
-          className="min-w-0 max-w-md flex-1 rounded-md bg-transparent px-1 text-2xl font-semibold tracking-tight outline-none focus:bg-panel"
-          aria-label="Board name"
-        />
+        {may("board.update") ? (
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name.trim() && name !== board.name && run(() => renameBoard(board.id, name))}
+            className="min-w-0 max-w-md flex-1 rounded-md bg-transparent px-1 text-2xl font-semibold tracking-tight outline-none focus:bg-panel"
+            aria-label="Board name"
+          />
+        ) : (
+          <h1 className="min-w-0 max-w-md flex-1 truncate px-1 text-2xl font-semibold tracking-tight">{board.name}</h1>
+        )}
         {pending && <span className="text-xs text-muted">Saving…</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter cards…" className="input h-9 w-44" aria-label="Filter cards" />
@@ -216,7 +271,7 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
       {/* Lanes */}
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-4">
-          <SortableContext items={lists.map((l) => l.id)} strategy={horizontalListSortingStrategy}>
+          <SortableContext items={lists.map((l) => l.id)} strategy={horizontalListSortingStrategy} disabled={!draggable}>
             {lists.map((list) => (
               <Lane
                 key={list.id}
@@ -229,10 +284,12 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
                 onCardMenu={cardMenu}
                 onListMenu={listMenu}
                 onAdd={(title) => run(() => createCard(board.id, list.id, title))}
+                canAdd={may("card.create")}
+                canSort={draggable}
               />
             ))}
           </SortableContext>
-          <AddLane onAdd={(n) => run(() => createList(board.id, n))} />
+          {may("card.create") && <AddLane onAdd={(n) => run(() => createList(board.id, n))} />}
         </div>
         <DragOverlay>{dragging && <CardTile card={dragging} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
       </DndContext>
@@ -244,7 +301,7 @@ export function Board({ board, me }: { board: BoardT; me: string }) {
 }
 
 function Lane({
-  list, cards, visible, labelsById, peopleById, onOpen, onCardMenu, onListMenu, onAdd,
+  list, cards, visible, labelsById, peopleById, onOpen, onCardMenu, onListMenu, onAdd, canAdd, canSort,
 }: {
   list: ListT
   cards: CardT[]
@@ -255,6 +312,10 @@ function Lane({
   onCardMenu: (c: CardT, x: number, y: number) => void
   onListMenu: (l: ListT, x: number, y: number) => void
   onAdd: (title: string) => void
+  /** card.create — whether the inline composer shows at all. */
+  canAdd: boolean
+  /** card.move — whether the lane header is a drag handle. */
+  canSort: boolean
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" } })
   const [adding, setAdding] = useState(false)
@@ -271,13 +332,27 @@ function Lane({
       data-lane={list.name}
       onContextMenu={(e) => { if ((e.target as HTMLElement).closest("[data-card]")) return; e.preventDefault(); onListMenu(list, e.clientX, e.clientY) }}
     >
-      <header className="flex cursor-grab items-center gap-2 px-3 pb-2 pt-3 active:cursor-grabbing" {...attributes} {...listeners}>
+      <header
+        className={`flex items-center gap-2 px-3 pb-2 pt-3 ${canSort ? "cursor-grab active:cursor-grabbing" : ""}`}
+        {...attributes}
+        {...listeners}
+      >
         <h2 className="flex-1 truncate text-sm font-semibold">{list.name}</h2>
         {list.isDoneList && <span title="Cards here count as done">✓</span>}
         <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${over ? "bg-danger/15 text-danger" : "text-muted"}`}>
           {cards.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
         </span>
-        <button type="button" className="rounded px-1 text-muted hover:text-text" aria-label={`${list.name} options`} onClick={(e) => onListMenu(list, e.clientX, e.clientY)} onPointerDown={(e) => e.stopPropagation()}>⋯</button>
+        {canSort && (
+          <button
+            type="button"
+            className="rounded px-1 text-muted hover:text-text"
+            aria-label={`${list.name} options`}
+            onClick={(e) => onListMenu(list, e.clientX, e.clientY)}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            ⋯
+          </button>
+        )}
       </header>
       <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
@@ -288,7 +363,7 @@ function Lane({
         </div>
       </SortableContext>
       <div className="p-2 pt-0">
-        {adding ? (
+        {!canAdd ? null : adding ? (
           <form onSubmit={(e) => { e.preventDefault(); if (title.trim()) { onAdd(title); setTitle("") } }}>
             <textarea
               autoFocus

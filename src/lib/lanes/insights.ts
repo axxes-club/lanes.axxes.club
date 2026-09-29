@@ -1,6 +1,7 @@
 import "server-only"
 import { and, asc, eq, gte, isNull, sql } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
+import type { ThroughputPoint } from "./types"
 
 /**
  * Delivery analytics.
@@ -23,14 +24,6 @@ import { db, schema as s } from "@/lib/db"
  */
 
 const DAY = 86_400_000
-
-export type ThroughputPoint = {
-  /** ISO date of the Monday that starts the week. */
-  week: string
-  label: string
-  created: number
-  completed: number
-}
 
 export type BoardInsights = {
   cards: { total: number; open: number; done: number; overdue: number; unassigned: number; mine: number }

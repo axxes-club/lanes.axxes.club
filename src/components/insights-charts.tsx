@@ -1,6 +1,8 @@
+"use client"
+
 import { useId, useState } from "react"
 import { cx } from "@/components/ui"
-import type { ThroughputPoint } from "@/lib/lanes/insights"
+import type { ThroughputPoint } from "@/lib/lanes/types"
 
 /**
  * Throughput, as a bar chart.

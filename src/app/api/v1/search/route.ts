@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   if (!auth) return unauthorized(req)
   if (!auth.scope("read")) return forbidden("This token cannot read.", undefined, req)
 
-  const limit = rateLimit(`${auth.tokenId}:read`, "read")
+  const limit = await rateLimit(`${auth.tokenId}:read`, "read")
   if (!limit.ok) {
     return withHeaders(
       fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit)}s.`),

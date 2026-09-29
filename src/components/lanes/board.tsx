@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   DndContext,
@@ -34,6 +34,7 @@ import {
   updateList,
 } from "@/lib/lanes/actions"
 import { CardPanel } from "./card-panel"
+import { ListView } from "./list-view"
 import { PokerPanel } from "./poker-panel"
 import { ContextMenu, type MenuItem } from "./context-menu"
 
@@ -80,6 +81,25 @@ export function Board({
   // re-opening the same card and trapping the panel shut.
   const [openedFocus, setOpenedFocus] = useState<string | null>(null)
   const [pokerCard, setPokerCard] = useState<string | null>(null)
+  // The view lives in the URL so a filtered board is a bookmark, and so the
+  // back button moves between views rather than leaving the board.
+  const [view, setView] = useState<"board" | "list">("board")
+
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("view")
+    if (initial === "list" || initial === "board") setView(initial)
+  }, [])
+
+  const switchView = useCallback(
+    (next: "board" | "list") => {
+      setView(next)
+      const url = new URL(window.location.href)
+      if (next === "list") url.searchParams.set("view", "list")
+      else url.searchParams.delete("view")
+      router.replace(url.toString(), { scroll: false })
+    },
+    [router],
+  )
   const [q, setQ] = useState("")
   const [label, setLabel] = useState<string>("")
   const [person, setPerson] = useState<string>("")
@@ -253,6 +273,21 @@ export function Board({
         )}
         {pending && <span className="text-xs text-muted">Saving…</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg border border-line bg-panel-2 p-0.5" role="group" aria-label="View">
+            {(["board", "list"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => switchView(v)}
+                aria-pressed={view === v}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition ${
+                  view === v ? "bg-panel-3 text-text shadow-sm" : "text-muted hover:text-text"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter cards…" className="input h-9 w-44" aria-label="Filter cards" />
           <select value={label} onChange={(e) => setLabel(e.target.value)} className="input h-9 w-auto" aria-label="Filter by label">
             <option value="">All labels</option>
@@ -273,7 +308,10 @@ export function Board({
         </div>
       </div>
 
-      {/* Lanes */}
+      {view === "list" ? (
+        <ListView board={board} me={me} visible={visible} canEdit={may("card.create")} />
+      ) : (
+      /* Lanes */
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-4">
           <SortableContext items={lists.map((l) => l.id)} strategy={horizontalListSortingStrategy} disabled={!draggable}>
@@ -298,6 +336,7 @@ export function Board({
         </div>
         <DragOverlay>{dragging && <CardTile card={dragging} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
       </DndContext>
+      )}
 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {openCard && <CardPanel cardId={openCard} board={board} me={me} onClose={() => setOpenCard(null)} onChanged={() => router.refresh()} />}

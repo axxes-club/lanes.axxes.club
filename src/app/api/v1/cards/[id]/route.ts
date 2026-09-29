@@ -135,7 +135,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!auth) return unauthorized(req)
     if (!auth.scope("read")) return forbidden("This token cannot read.", undefined, req)
 
-    const limit = rateLimit(`${auth.tokenId}:read`, "read")
+    const limit = await rateLimit(`${auth.tokenId}:read`, "read")
     if (!limit.ok) {
       return withHeaders(
         fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit)}s.`),
@@ -171,7 +171,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!auth) return unauthorized(req)
     if (!auth.scope("write")) return forbidden("This token cannot write.", "Issue a token with the write scope.", req)
 
-    const limit = rateLimit(`${auth.tokenId}:write`, "write")
+    const limit = await rateLimit(`${auth.tokenId}:write`, "write")
     if (!limit.ok) {
       return withHeaders(
         fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit)}s.`),
@@ -262,7 +262,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!auth) return unauthorized(req)
     if (!auth.scope("write")) return forbidden("This token cannot write.", "Issue a token with the write scope.", req)
 
-    const limit = rateLimit(`${auth.tokenId}:write`, "write")
+    const limit = await rateLimit(`${auth.tokenId}:write`, "write")
     if (!limit.ok) {
       return withHeaders(
         fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit)}s.`),

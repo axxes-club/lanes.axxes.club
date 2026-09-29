@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { LanesError } from "./errors"
+import { rateLimitStoreName } from "./rate-limit"
 
 /**
  * One response shape for the whole public API.
@@ -78,9 +79,18 @@ export async function body<T = Record<string, unknown>>(req: Request): Promise<T
   }
 }
 
-/** Standard headers on every response, including rate-limit state. */
+/**
+ * Standard headers on every response, including rate-limit state.
+ *
+ * `x-lanes-ratelimit-store` says which store is enforcing the ceiling. With
+ * an in-process counter behind more than one instance the real ceiling is
+ * N times the advertised one, and a client that trusts the header and gets
+ * throttled with no 429 has no way to explain it. Publishing the store makes
+ * that visible rather than a mystery.
+ */
 export function withHeaders(res: NextResponse, limits?: { limit: number; remaining: number; reset: number }) {
   res.headers.set("x-lanes-version", "2026-09-01")
+  res.headers.set("x-lanes-ratelimit-store", rateLimitStoreName())
   if (limits) {
     res.headers.set("x-ratelimit-limit", String(limits.limit))
     res.headers.set("x-ratelimit-remaining", String(limits.remaining))

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import { authenticate, forbidden, unauthorized } from "@/lib/lanes/api-auth"
 import { body, created, fail, ok, withHeaders } from "@/lib/lanes/api-response"
-import { rateLimit, retryAfterSeconds } from "@/lib/lanes/rate-limit"
+import { rateLimit, retryAfterSeconds, rateLimitStoreName } from "@/lib/lanes/rate-limit"
 import { boardPrefix, cardKey } from "@/lib/lanes/prefix"
 import { template } from "@/lib/lanes/templates"
 
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   if (!auth.scope("read")) return forbidden("This token cannot read.", "Issue a token with the read scope.", req)
 
   const limit = clamp(Number(new URL(req.url).searchParams.get("limit") ?? 50), 1, 200)
-  const limit_ = rateLimit(`${auth.tokenId}:read`, "read")
+  const limit_ = await rateLimit(`${auth.tokenId}:read`, "read")
   if (!limit_.ok) {
     return withHeaders(
       fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
   if (!auth) return unauthorized(req)
   if (!auth.scope("write")) return forbidden("This token cannot write.", "Issue a token with the write scope.", req)
 
-  const limit_ = rateLimit(`${auth.tokenId}:write`, "write")
+  const limit_ = await rateLimit(`${auth.tokenId}:write`, "write")
   if (!limit_.ok) {
     return withHeaders(
       fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),

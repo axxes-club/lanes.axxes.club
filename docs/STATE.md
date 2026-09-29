@@ -3,20 +3,27 @@
 Verified against the working tree and the live database on the last pass.
 Where something is unverified it says so.
 
-## Commits
+## Deployed
 
-| SHA | Summary | Deployed |
-|-----|---------|----------|
-| `29dae5e` | feat: Lanes — Kanban boards for AXXES workspaces | yes |
-| `1774bbd` | feat(delivery): the enterprise foundation — roles, permissions, sprints, poker, API | yes |
-| `ed238e9` | feat(organizations): let a person switch which organization they are in | yes |
+**Everything on `main` is live at `lanes.axxes.club`.** The Vercel deployment
+block recorded below has cleared; `npx vercel --prod --yes` works and takes the
+production alias automatically.
 
-Nothing is deployable beyond `ed238e9` right now — see [Paused](#paused).
+| SHA | Summary |
+|-----|---------|
+| `29dae5e` | feat: Lanes — Kanban boards for AXXES workspaces |
+| `1774bbd` | feat(delivery): roles, permissions, sprints, poker, API |
+| `ed238e9` | feat(organizations): switch which organization you are in |
+| `e207ebd` | feat(roles): board members, sprint clock, permission-gated board UI |
+| `e9af4b4` | feat(poker): planning poker |
+| `4c9fe71` | feat(api): the public API, plus two bugs it exposed |
+| `8013faa` | docs(api): the developer documentation site |
+| `73bb793` | fix(cards): repair rows with no sequence |
 
 ## Working tree
 
-**25 uncommitted changes.** This is the important part of this document: a
-substantial amount of Lanes exists only on this machine.
+**Nothing is uncommitted.** The working tree is clean and everything is
+deployed.
 
 ### Committed and live
 
@@ -66,83 +73,87 @@ saw it.
 
 ## Wiring audit
 
-Exported server logic, and whether any page can reach it.
+Exported server logic, and whether a page can reach it. **All five orphans now
+have screens** — this table is the record of that.
 
-| Module | Exports | Reachable from a page |
-|--------|--------:|----------------------|
-| `templates` | 4 | yes — `actions.ts` |
-| `commands` | 6 | only via `command-palette.tsx`, which is not mounted |
-| `search` | 5 | only via `command-palette.tsx`, which is not mounted |
-| `roles` | 5 | **no** |
-| `permissions` | 5 | **no** |
-| `sprints` | 7 | **no** |
-| `poker` | 10 | **no** |
-| `insights` | 2 | **no** |
-
-**Five modules of finished logic that a user cannot reach.** This is the single
-biggest fact about Lanes: the gap is not missing logic, it is missing screens.
+| Module | Reachable from |
+|--------|----------------|
+| `templates` | `/dashboard` gallery, the create dialog, `POST /api/v1/boards` |
+| `commands` | the command palette, mounted in the app shell |
+| `search` | the palette, `/dashboard/search`, `GET /api/v1/search` |
+| `roles` | `/dashboard/b/[id]/settings` |
+| `permissions` | the same screen, the board UI, and every API route |
+| `sprints` | the board toolbar |
+| `poker` | the board card menu → Estimate with poker |
+| `insights` | `/dashboard/insights` and the boards home |
 
 ## Routes
 
 Pages:
 
 ```
-/                              redirect
+/                              marketing
+/docs                          developer documentation, 12 pages
 /sign-in                       AXXES SSO
 /no-tenant                      no workspace membership
-/dashboard                      board list
+/dashboard                      boards home
 /dashboard/b/[id]               the board
+/dashboard/b/[id]/settings      people and roles
 /dashboard/my-cards             cards assigned to you
+/dashboard/insights             throughput, lead time, aging
+/dashboard/search               workspace search
+/dashboard/people               people and their load
+/dashboard/apps                 the AXXES suite hub
 ```
 
 API:
 
 ```
 /api/auth/[...all]                      Better Auth
+/api/v1/boards                          list, create
 /api/v1/boards/[id]                     board read/update
 /api/v1/boards/[id]/cards               card list and create
+/api/v1/cards/[id]                      read, patch, soft delete
+/api/v1/search                          ranked search
 ```
-
-`search.ts` and `insights.ts` describe a `/api/v1/search` that **does not
-exist yet**.
 
 ## Data, right now
 
-Live row counts:
+The four `lanes-platform` tables exist and are in use: `board_stars`,
+`saved_views`, `card_links`, `dismissed_tips`.
 
-| Table | Rows |
-|-------|-----:|
-| `projects` | 4 |
-| `project_cards` | 35 |
-| `board_member_roles` | **0** |
-| `sprints` | **0** |
-| `poker_rounds` | **0** |
-| `integrations` | **0** |
-| `custom_fields` | **0** |
-| `webhooks` | **0** |
-| `audit_log` | **0** |
+`board_member_roles` had **0 rows** — the role matrix had never run against
+real data because no screen could write to it. That gap is now closed by
+`/dashboard/b/[id]/settings`.
 
-The enterprise tables are **empty**. There are no roles assigned, no sprints,
-no integrations, no audit entries. Nobody has used any of that machinery
-through the product, because none of it has a screen.
+`sprints`, `poker_rounds`, `integrations`, `custom_fields`, `webhooks` and
+`audit_log` are still empty. Sprints and poker are reachable from the board
+now but have not been used in production; integrations, custom fields,
+webhooks and the audit viewer have **no screen yet** and are the next thing
+worth building.
 
-This matters when testing: role behaviour has never been exercised against
-real rows. Treat the role matrix as untested.
+## Two real bugs, found by running the API
 
-## Paused
+Both are recorded in full in the `4c9fe71` commit message.
 
-Vercel has stopped accepting deployments. Concretely:
+1. **API tokens had never worked.** `api_tokens.id` is a `uuid` column and
+   `newToken()` generated 18 hex characters. Every insert failed. The table had
+   zero rows and the authenticated API was unreachable.
+2. **Card keys collided.** 82 cards had no `custom_fields.seq` and rendered as
+   the same key. Repaired by `scripts/migrate.sql`; `scripts/fix-card-keys.mjs`
+   re-runs it and reports.
 
-- No new Lanes deploy until the limit resets.
-- `lanes.axxes.club` therefore still serves the `ed238e9` build.
-- The 1,700 uncommitted lines are **not backed up anywhere** — there is no
-  remote for this repo, and no second machine. Commit them locally before
-  anything else, or a disk failure loses them.
+The lesson worth keeping: neither showed up in `tsc` or `next build`. Both were
+found by minting a token and calling the endpoints.
 
-First action when picking this up:
+## Still open
 
-```
-git add -A && git commit -m "..."
-```
-
-Nothing on disk is safe yet.
+- **No git remote.** Every commit is on this machine only. A disk failure loses
+  everything. `git remote add origin …` is the highest-value thing left to do.
+- **Integrations, custom fields, webhooks and the audit viewer** have finished
+  tables and no screens.
+- **The rate limiter is per-instance.** Correct for one, wrong for two. Put a
+  shared store behind `rateLimit()` before running more than one.
+- **Board templates are not shared across a workspace** and there is no
+  template gallery duplication flow.
+- **`developer.axxes.club` still needs an A record** → `76.76.21.21`.

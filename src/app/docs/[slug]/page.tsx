@@ -2,12 +2,12 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { DOC_PAGES } from "@/lib/docs/registry"
 import { findDoc, neighbours } from "@/lib/docs/nav"
-import { DocBodyView } from "@/lib/docs/render"
-import { headings } from "@/lib/docs/render"
+import { DocBodyView, headings } from "@/lib/docs/render"
 import { IconArrowLeft, IconArrowRight } from "@/components/icons"
 
 export function generateStaticParams() {
-  return Object.keys(DOC_PAGES).map((slug) => ({ slug }))
+  // The empty slug is the /docs index, which is its own route.
+  return Object.keys(DOC_PAGES).filter((slug) => slug !== "").map((slug) => ({ slug }))
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {

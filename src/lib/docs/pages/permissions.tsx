@@ -1,6 +1,7 @@
 import { code, h2, h3, list, note, p } from "@/lib/docs/content"
 import type { DocBlock, DocBody } from "@/lib/docs/content"
-import { BOARD_ROLES, BOARD_ROLE_LABEL, ROLE_SUMMARY } from "@/lib/lanes/permissions"
+import { BOARD_ROLES, ROLE_SUMMARY } from "@/lib/lanes/permissions"
+import { BOARD_ROLE_LABEL } from "@/lib/lanes/roles"
 
 /**
  * One heading and one sentence per role, generated from the same two tables

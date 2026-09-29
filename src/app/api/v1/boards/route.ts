@@ -42,13 +42,14 @@ export async function GET(req: Request) {
       settings: schema.projects.settings,
       createdAt: schema.projects.createdAt,
       updatedAt: schema.projects.updatedAt,
-      // The correlated subqueries reference the outer row through
-      // `schema.projects.id` rather than a literal table name: Drizzle
-      // renders it as the properly quoted `"projects"."id"`, and hand-writing
-      // the name produces `c.project_id = schema.projects.id`, which Postgres
-      // reads as a column named "schema".
-      open: sql<number>`(select count(*) from project_cards c join project_lists l on l.id = c.list_id where c.project_id = ${schema.projects.id} and c.deleted_at is null and c.archived_at is null and not coalesce(l.is_done_list, false))`.mapWith(Number),
-      done: sql<number>`(select count(*) from project_cards c join project_lists l on l.id = c.list_id where c.project_id = ${schema.projects.id} and c.deleted_at is null and c.archived_at is null and coalesce(l.is_done_list, false))`.mapWith(Number),
+      // The correlated subqueries name the outer row with an explicitly
+      // quoted `"projects"."id"`. Interpolating the Drizzle column does not
+      // work here: inside a select-field fragment Drizzle has no table alias
+      // context and renders a bare `"id"`, which Postgres resolves against
+      // the subquery's own FROM clause. This matches the pattern already used
+      // by listBoards() in data.ts.
+      open: sql<number>`(select count(*) from project_cards c join project_lists l on l.id = c.list_id where c.project_id = "projects"."id" and c.deleted_at is null and c.archived_at is null and not coalesce(l.is_done_list, false))`.mapWith(Number),
+      done: sql<number>`(select count(*) from project_cards c join project_lists l on l.id = c.list_id where c.project_id = "projects"."id" and c.deleted_at is null and c.archived_at is null and coalesce(l.is_done_list, false))`.mapWith(Number),
     })
     .from(schema.projects)
     .where(

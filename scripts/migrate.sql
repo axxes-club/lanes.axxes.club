@@ -55,3 +55,40 @@ create table if not exists dismissed_tips (
   created_at timestamptz not null default now(),
   primary key (user_id, tip_key)
 );
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Repair: cards with no sequence number.
+--
+-- A card key is `<prefix>-<seq>`, and `seq` lives in custom_fields. Six
+-- seeded rows in this database have an empty custom_fields object, so they
+-- all render as the same key (e.g. every one of them as "AB-00"). That is
+-- worse than having no key at all, because `GET /api/v1/cards/AB-00`
+-- addresses an arbitrary one of them and returns the wrong card without
+-- erroring.
+--
+-- The fix assigns each one the next free sequence on its board. Rows that
+-- already have a sequence are untouched, so this is safe to re-run; a second
+-- run finds nothing to do because the first one left no NULLs behind.
+--
+-- `row_number()` counts the rows being updated alongside the ones that
+-- already had a sequence, so the new numbers cannot collide with existing
+-- ones either.
+update project_cards c
+set custom_fields = jsonb_set(coalesce(c.custom_fields, '{}'::jsonb), '{seq}', to_jsonb(assigned.n))
+from (
+  select
+    c2.id,
+    row_number() over (partition by c2.project_id order by c2.created_at, c2.id)
+      + coalesce(
+          (select max((c3.custom_fields->>'seq')::int)
+             from project_cards c3
+            where c3.project_id = c2.project_id
+              and c3.custom_fields ? 'seq'
+              and c3.deleted_at is null),
+          0
+        ) as n
+  from project_cards c2
+  where c2.deleted_at is null
+    and not (coalesce(c2.custom_fields, '{}'::jsonb) ? 'seq')
+) assigned
+where c.id = assigned.id;

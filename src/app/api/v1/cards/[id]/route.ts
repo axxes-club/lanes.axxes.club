@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm"
+import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import { authenticate, forbidden, unauthorized } from "@/lib/lanes/api-auth"
 import { body, fail, fromError, noContent, ok, withHeaders } from "@/lib/lanes/api-response"
@@ -40,6 +40,11 @@ async function resolve(cardId: string, tenantId: string): Promise<Resolved | nul
           : eq(keyExpression(), cardId.toUpperCase()),
       ),
     )
+    // Oldest first. A key is only unique while the board's sequence is
+    // intact, and this makes the lookup deterministic even when it is not:
+    // repeated calls return the same card instead of an arbitrary one, which
+    // is the difference between a wrong answer and an unpredictable one.
+    .orderBy(asc(schema.projectCards.createdAt), asc(schema.projectCards.id))
     .limit(1)
   if (!row) return null
   return { id: row.id, boardId: row.boardId, settings: row.settings, boardName: row.boardName }

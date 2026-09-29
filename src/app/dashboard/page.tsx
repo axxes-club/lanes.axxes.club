@@ -1,67 +1,129 @@
 import Link from "next/link"
 import { requireContext } from "@/lib/context"
 import { listBoards } from "@/lib/lanes/data"
-import { createBoard } from "@/lib/lanes/actions"
-import { PageHeader } from "@/components/ui"
+import { starredBoards } from "@/lib/lanes/search"
+import { workspaceInsights } from "@/lib/lanes/insights"
+import { PageHeader, Empty, Meter } from "@/components/ui"
+import { NewBoardTrigger } from "@/components/new-board"
+import { TemplateGallery } from "@/components/template-gallery"
+import { BoardCard } from "@/components/board-card"
+import { IconBoard, IconChart, IconInbox, IconStar } from "@/components/icons"
 
-const COLORS = ["#60a5fa", "#a78bfa", "#f472b6", "#fb923c", "#facc15", "#34d399"]
+export const dynamic = "force-dynamic"
 
 export default async function BoardsPage() {
   const ctx = await requireContext()
-  const boards = await listBoards(ctx.tenant.id)
+  const [boards, starred, insights] = await Promise.all([
+    listBoards(ctx.tenant.id),
+    starredBoards(ctx.tenant.id, ctx.userId),
+    workspaceInsights(ctx.tenant.id, 8),
+  ])
+
+  const starredIds = new Set(starred.map((b) => b.id))
+  const pinned = boards.filter((b) => starredIds.has(b.id))
+  const rest = boards.filter((b) => !starredIds.has(b.id))
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader title="Boards" description={`Every board in ${ctx.tenant.name}. Also available as Projects in the AXXES Suite.`} />
+    <div className="space-y-10">
+      <PageHeader
+        eyebrow={ctx.tenant.name}
+        title="Boards"
+        description="Everything this workspace is delivering. Boards also appear as Projects across the AXXES suite."
+        action={<NewBoardTrigger />}
+      />
 
-      <form action={createBoard} className="card mb-8 grid gap-3 p-5 sm:grid-cols-[2fr_1.2fr_auto_auto] sm:items-end">
-        <label className="grid gap-1.5 text-sm">
-          <span className="text-muted">New board</span>
-          <input name="name" required maxLength={100} placeholder="Website relaunch" className="input" />
-        </label>
-        <label className="grid gap-1.5 text-sm">
-          <span className="text-muted">Start from</span>
-          <select name="template" className="input" defaultValue="kanban">
-            <option value="kanban">Kanban — To do · In progress · Done</option>
-            <option value="sprint">Sprint — Backlog → Review → Done</option>
-            <option value="pipeline">Pipeline — Leads → Won</option>
-          </select>
-        </label>
-        <fieldset className="flex gap-1.5 pb-1.5" aria-label="Color">
-          {COLORS.map((c, i) => (
-            <label key={c} className="cursor-pointer">
-              <input type="radio" name="color" value={c} defaultChecked={i === 0} className="peer sr-only" />
-              <span className="block size-6 rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-panel peer-checked:ring-text" style={{ background: c }} />
-            </label>
-          ))}
-        </fieldset>
-        <button className="btn-primary">Create board</button>
-      </form>
+      {/* The three numbers someone actually opens this page for. */}
+      {boards.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <SummaryTile
+            label="Open cards"
+            value={insights.cardsOpen}
+            hint={insights.overdue > 0 ? `${insights.overdue} overdue` : "Nothing overdue"}
+            tone={insights.overdue > 0 ? "bad" : "good"}
+            href="/dashboard/my-cards"
+            Icon={IconInbox}
+          />
+          <SummaryTile
+            label="Shipped · 30 days"
+            value={insights.cardsDone30}
+            hint="Across every board"
+            tone="good"
+            href="/dashboard/insights"
+            Icon={IconChart}
+          />
+          <SummaryTile
+            label="Boards"
+            value={insights.boards}
+            hint={`${insights.people} ${insights.people === 1 ? "person" : "people"} in the workspace`}
+            tone="good"
+            href="/dashboard/people"
+            Icon={IconBoard}
+          />
+        </div>
+      )}
 
       {boards.length === 0 ? (
-        <div className="card grid place-items-center px-6 py-16 text-center">
-          <p className="font-medium">No boards yet</p>
-          <p className="mt-1 max-w-sm text-sm text-muted">Create one above. Pick a template and you&apos;ll have lanes ready to go.</p>
-        </div>
+        <Empty
+          icon={<IconBoard size={20} />}
+          title="No boards yet"
+          body="Pick a template and you will have lanes, labels and a board your team can use today."
+          action={<NewBoardTrigger />}
+        />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {boards.map((b) => {
-            const total = b.open + b.done
-            return (
-              <Link key={b.id} href={`/dashboard/b/${b.id}`} className="card overflow-hidden transition hover:border-accent/50">
-                <div className="h-2" style={{ background: b.color ?? "var(--accent)" }} />
-                <div className="p-5">
-                  <p className="font-medium">{b.name}</p>
-                  <p className="mt-1 text-sm text-muted">{b.open} open · {b.done} done</p>
-                  <div className="mt-4 h-1.5 overflow-hidden rounded bg-line">
-                    <div className="h-full bg-accent" style={{ width: `${total ? (b.done / total) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+        <>
+          {pinned.length > 0 && (
+            <section>
+              <h2 className="eyebrow mb-3 flex items-center gap-1.5">
+                <IconStar size={12} /> Starred
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {pinned.map((b) => (
+                  <BoardCard key={b.id} board={b} starred />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section>
+            <h2 className="eyebrow mb-3">{pinned.length > 0 ? "All boards" : "Your boards"}</h2>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {rest.map((b) => (
+                <BoardCard key={b.id} board={b} />
+              ))}
+            </div>
+          </section>
+
+          <TemplateGallery />
+        </>
       )}
     </div>
   )
 }
+
+function SummaryTile({
+  label,
+  value,
+  hint,
+  href,
+  tone,
+  Icon,
+}: {
+  label: string
+  value: number
+  hint: string
+  href: string
+  tone: "good" | "bad"
+  Icon: typeof IconChart
+}) {
+  return (
+    <Link href={href} className="card card-hover p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="eyebrow">{label}</p>
+        <Icon size={16} className={tone === "bad" ? "text-danger" : "text-faint"} />
+      </div>
+      <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
+      <p className={`mt-1.5 text-xs ${tone === "bad" ? "text-danger" : "text-muted"}`}>{hint}</p>
+    </Link>
+  )
+}
+

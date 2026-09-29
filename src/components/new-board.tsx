@@ -192,3 +192,49 @@ export function NewBoardTrigger() {
 
   return <NewBoardDialog open={open} onClose={() => setOpen(false)} />
 }
+
+/**
+ * A button that creates a board from a specific template.
+ *
+ * Used by the template gallery. It reuses createBoard rather than adding a
+ * second creation path, so "duplicate this template" and "new board" cannot
+ * drift apart — which is how a board ends up with one set of lanes in one
+ * place and a different set in another.
+ */
+export function NewBoardLauncher({
+  templateKey,
+  accent,
+  name,
+  children,
+  className = "",
+}: {
+  templateKey: string
+  accent: string
+  name: string
+  children: React.ReactNode
+  className?: string
+}) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+
+  return (
+    <form
+      className={className}
+      onSubmit={(e) => {
+        e.preventDefault()
+        start(async () => {
+          const form = new FormData()
+          form.set("name", name)
+          form.set("template", templateKey)
+          form.set("color", accent)
+          await createBoard(form)
+          router.refresh()
+        })
+      }}
+    >
+      <button type="submit" disabled={pending} className="w-full text-left disabled:opacity-60">
+        {pending ? "Creating…" : children}
+      </button>
+    </form>
+  )
+}

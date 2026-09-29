@@ -195,6 +195,16 @@ export type WorkspaceInsights = {
   weekly: ThroughputPoint[]
   /** The busiest lanes in the workspace, for "where the work is sitting". */
   lanes: { list: string; board: string; count: number }[]
+  /**
+   * The oldest open cards across every board.
+   *
+   * Workspace-level rather than per-board because "what has nobody touched
+   * in a month" is a question about the whole portfolio, and answering it by
+   * opening each board in turn is how it stays unanswered.
+   */
+  aging: { id: string; boardId: string; title: string; board: string; list: string; ageDays: number }[]
+  /** Median and p85 days from creation to done, for work finished in the window. */
+  leadTime: { median: number; p85: number } | null
 }
 
 /** The same numbers, across every board in the workspace. */
@@ -254,6 +264,38 @@ export async function workspaceInsights(tenantId: string, weeks = 8): Promise<Wo
     .orderBy(sql`count(*) desc`)
     .limit(8)
 
+  const aging = await db
+    .select({
+      id: s.projectCards.id,
+      boardId: s.projectCards.projectId,
+      title: s.projectCards.title,
+      board: s.projects.name,
+      list: s.projectLists.name,
+      ageDays: sql<number>`extract(epoch from (now() - ${s.projectCards.createdAt})) / 86400`.mapWith(Number),
+    })
+    .from(s.projectCards)
+    .innerJoin(s.projects, eq(s.projects.id, s.projectCards.projectId))
+    .innerJoin(s.projectLists, eq(s.projectLists.id, s.projectCards.listId))
+    .where(
+      and(
+        liveBoards,
+        isNull(s.projectCards.deletedAt),
+        isNull(s.projectCards.archivedAt),
+        sql`not coalesce(${s.projectLists.isDoneList}, false)`,
+      ),
+    )
+    .orderBy(asc(s.projectCards.createdAt))
+    .limit(10)
+
+  const finished = await db
+    .select({
+      lead: sql<number>`extract(epoch from (${s.projectCards.completedAt} - ${s.projectCards.createdAt})) / 86400`.mapWith(Number),
+    })
+    .from(s.projectCards)
+    .innerJoin(s.projects, eq(s.projects.id, s.projectCards.projectId))
+    .where(and(liveBoards, isNull(s.projectCards.deletedAt), gte(s.projectCards.completedAt, from)))
+  const leads = finished.map((f) => f.lead).filter((n) => Number.isFinite(n) && n >= 0).sort((a, b) => a - b)
+
   return {
     boards: head.boards,
     people: head.people,
@@ -262,5 +304,7 @@ export async function workspaceInsights(tenantId: string, weeks = 8): Promise<Wo
     overdue: cards.overdue,
     weekly,
     lanes,
+    aging: aging.map((a) => ({ ...a, ageDays: Math.round(a.ageDays) })),
+    leadTime: leads.length ? { median: percentile(leads, 50), p85: percentile(leads, 85) } : null,
   }
 }

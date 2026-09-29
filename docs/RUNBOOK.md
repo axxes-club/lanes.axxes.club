@@ -54,17 +54,41 @@ the type changes in the same commit.
 
 ## Deploy
 
-Blocked — Vercel has stopped accepting deployments.
+The Vercel deployment block cleared. `npx vercel --prod --yes` works, and a
+`--prod` deploy takes the `lanes.axxes.club` alias automatically.
 
 ```
-npx vercel --prod
-npx vercel alias set <deployment> lanes.axxes.club
+npx vercel --prod --yes
 npx vercel alias ls
 ```
 
-**Check `alias ls` after every deploy.** A "Success" from `alias set` is not
-proof the alias took; during the Qortr SSO work an alias reported success three
-times and never appeared in the list. Verify, then test the live route.
+**A `200` from the deployment URL is not the check.** Preview deployments sit
+behind Vercel Deployment Protection and answer every request with a 302 to
+`vercel.com/sso-api`, which looks exactly like a redirect in your own app and
+is not one. Verify against `https://lanes.axxes.club` instead, and check the
+alias with `vercel alias ls` — during the Qortr SSO work an alias reported
+success three times and never appeared in the list.
+
+## Card keys can be repaired
+
+`project_cards` is a **shared** table. Other AXXES apps write to it, and rows
+that arrive without a `custom_fields.seq` render as `PREFIX-00` — the same key
+as every other row on that board that also lacks one. A key that silently
+addresses the wrong card is worse than no key.
+
+```bash
+node scripts/fix-card-keys.mjs
+```
+
+It reports before and after, and exits non-zero unless the after-state is
+zero missing and zero duplicated. Run it whenever a board shows duplicate
+keys.
+
+There is deliberately **no database constraint** forcing `seq` to exist. The
+table is shared across the suite, and a `CHECK (custom_fields ? 'seq')` would
+turn a cosmetic key collision into a failed insert in whichever sibling app
+happened to write next. The cost of that risk is higher than the cost of a
+repair script.
 
 ## Verify after deploying
 

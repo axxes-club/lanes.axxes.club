@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 /** GET /api/v1/boards/:id/cards — every card, with its stable key. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await authenticate(req)
-  if (!auth) return unauthorized()
+  if (!auth) return unauthorized(req)
   const { id } = await params
 
   const access = await auth.accessFor(id)
@@ -64,7 +64,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 /** POST /api/v1/boards/:id/cards — create a card. Needs card.create. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await authenticate(req)
-  if (!auth) return unauthorized()
+  if (!auth) return unauthorized(req)
   if (!auth.scope("write")) return forbidden("This token cannot write.")
   const { id } = await params
 

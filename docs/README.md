@@ -2,8 +2,8 @@
 
 **lanes.axxes.club** — Kanban boards for AXXES workspaces.
 
-> **Paused.** Deploys are blocked by a Vercel limit, so nothing below is live
-> beyond commit `ed238e9`. This directory is the map for picking it back up.
+> **Live.** Everything on `main` is deployed at `lanes.axxes.club`. This
+> directory is the map for anyone picking it up.
 
 ## Read in this order
 
@@ -18,16 +18,16 @@
 
 ## The short version
 
-Lanes has a complete **data and logic layer** and a largely **absent UI layer**.
+Lanes used to be a complete **data and logic layer** with a largely **absent UI
+layer**: roughly 30 exported functions across `src/lib/lanes/`, five of which
+no route could reach. The product was a backend with a board view bolted on.
 
-Roughly 30 exported functions across `src/lib/lanes/` implement roles,
-permissions, sprints, poker planning, templates, search, insights and API
-tokens. Of those, **five are wired to a page and five are not reachable at
-all from any route**. The product is currently a backend with a board view
-bolted on.
+**That gap is closed.** Every module has a screen, the public API exists and is
+exercised end to end, and the developer documentation ships at `/docs`.
 
-That is the whole of it. The rest of this directory exists so the next person
-does not have to re-derive which half is done.
+What remains is written down in [`TODO.md`](./TODO.md), not guessed at. The
+largest remaining gaps are integrations, custom fields, webhooks and the audit
+viewer — all of which have finished tables and no UI yet.
 
 ## Ground rules this codebase follows
 

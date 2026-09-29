@@ -19,14 +19,72 @@ export const dynamic = "force-dynamic"
 
 type Resolved = { id: string; boardId: string; settings: unknown; boardName: string }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const KEY = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/
+
+/**
+ * Find a card by UUID or by key.
+ *
+ * A key like WEB-42 survives export, import and a change of database; a UUID
+ * does not. Anything a human is going to type into a script should be the
+ * thing that is meant to be typed, so both work.
+ *
+ * Unpadded keys are accepted too. `AB-1` and `AB-01` are the same card, and
+ * a 404 that says nothing about the padding is a bad first experience of an
+ * API whose whole selling point is keys you can say out loud. `prefix.ts`
+ * allows a padding of 1 to 6, so both padded and unpadded forms are tried
+ * before giving up.
+ */
 async function resolve(cardId: string, tenantId: string): Promise<Resolved | null> {
+  if (UUID.test(cardId)) return byId(cardId, tenantId)
+
+  const match = KEY.exec(cardId)
+  if (!match) return null
+  const [, prefix, digits] = match
+  const n = Number(digits)
+
+  // Widest first, so an exact hit on the board's own padding wins over a
+  // wider one when both would match.
+  for (const width of paddingWidths(digits)) {
+    const padded = `${prefix.toUpperCase()}-${String(n).padStart(width, "0")}`
+    // Awaited, and the null check is explicit: returning the promise instead
+    // would short-circuit the loop on the first miss, because a pending
+    // promise is always truthy.
+    const hit = await byKey(padded, tenantId)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** The widths worth trying, in order, never wider than `prefix.ts` allows. */
+function paddingWidths(digits: string): number[] {
+  const widths = new Set<number>([digits.length])
+  for (let w = 1; w <= 6; w++) widths.add(w)
+  return [...widths].sort((a, b) => Math.abs(a - digits.length) - Math.abs(b - digits.length))
+}
+
+async function byId(id: string, tenantId: string): Promise<Resolved | null> {
   const [row] = await db
     .select({
       id: schema.projectCards.id,
       boardId: schema.projectCards.projectId,
       settings: schema.projects.settings,
       boardName: schema.projects.name,
-      seq: schema.projectCards.customFields,
+    })
+    .from(schema.projectCards)
+    .innerJoin(schema.projects, eq(schema.projects.id, schema.projectCards.projectId))
+    .where(and(eq(schema.projects.tenantId, tenantId), eq(schema.projectCards.id, id), isNull(schema.projectCards.deletedAt)))
+    .limit(1)
+  return row ? { id: row.id, boardId: row.boardId, settings: row.settings, boardName: row.boardName } : null
+}
+
+async function byKey(key: string, tenantId: string): Promise<Resolved | null> {
+  const [row] = await db
+    .select({
+      id: schema.projectCards.id,
+      boardId: schema.projectCards.projectId,
+      settings: schema.projects.settings,
+      boardName: schema.projects.name,
     })
     .from(schema.projectCards)
     .innerJoin(schema.projects, eq(schema.projects.id, schema.projectCards.projectId))
@@ -34,20 +92,16 @@ async function resolve(cardId: string, tenantId: string): Promise<Resolved | nul
       and(
         eq(schema.projects.tenantId, tenantId),
         isNull(schema.projectCards.deletedAt),
-        // A key like WEB-42, or a plain UUID.
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cardId)
-          ? eq(schema.projectCards.id, cardId)
-          : eq(keyExpression(), cardId.toUpperCase()),
+        eq(keyExpression(), key),
       ),
     )
-    // Oldest first. A key is only unique while the board's sequence is
-    // intact, and this makes the lookup deterministic even when it is not:
-    // repeated calls return the same card instead of an arbitrary one, which
-    // is the difference between a wrong answer and an unpredictable one.
+    // Oldest first. A key is only unique while a board's sequence is intact,
+    // and this makes the lookup deterministic even when it is not: repeated
+    // calls return the same card rather than an arbitrary one, which is the
+    // difference between a wrong answer and an unpredictable one.
     .orderBy(asc(schema.projectCards.createdAt), asc(schema.projectCards.id))
     .limit(1)
-  if (!row) return null
-  return { id: row.id, boardId: row.boardId, settings: row.settings, boardName: row.boardName }
+  return row ? { id: row.id, boardId: row.boardId, settings: row.settings, boardName: row.boardName } : null
 }
 
 /**

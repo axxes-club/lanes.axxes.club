@@ -35,6 +35,7 @@ export function MembersPanel({
   canManage,
   viewerRole,
   viewerElevated,
+  stats,
 }: {
   boardId: string
   members: BoardMember[]
@@ -42,6 +43,8 @@ export function MembersPanel({
   canManage: boolean
   viewerRole: string
   viewerElevated: boolean
+  /** Shown above the list. Optional: the panel is also used without it. */
+  stats?: { cards: number; lists: number; members: number; sprints: number; comments: number; activityThisWeek: number }
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -62,6 +65,24 @@ export function MembersPanel({
 
   return (
     <div className="space-y-8">
+      {stats && (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {([
+            ["Cards", stats.cards],
+            ["Lanes", stats.lists],
+            ["With a role", stats.members],
+            ["Sprints", stats.sprints],
+            ["Comments", stats.comments],
+            ["Actions · 7d", stats.activityThisWeek],
+          ] as const).map(([label, value]) => (
+            <div key={label} className="card px-4 py-3">
+              <p className="eyebrow">{label}</p>
+              <p className="mt-1.5 text-xl font-semibold tabular-nums">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {error && (
         <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
           <p className="font-medium text-danger">{error.message}</p>

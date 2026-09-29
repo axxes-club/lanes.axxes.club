@@ -1,7 +1,8 @@
 import { Fragment, type ReactNode } from "react"
 import { IconCheck, IconCheckCircle, IconInfo, IconWarning } from "@/components/icons"
 import type { DocBody, DocBlock } from "./content"
-import { BOARD_ROLES, BOARD_ROLE_LABEL } from "@/lib/lanes/permissions"
+import { BOARD_ROLES } from "@/lib/lanes/permissions"
+import { BOARD_ROLE_LABEL } from "@/lib/lanes/roles"
 import { can } from "@/lib/lanes/permissions"
 import { CopyButton } from "@/components/copy-button"
 
@@ -14,6 +15,17 @@ import { CopyButton } from "@/components/copy-button"
  */
 export function DocBodyView({ body }: { body: DocBody }) {
   return <div className="prose-doc">{body.map((block, i) => <Block key={i} block={block} />)}</div>
+}
+
+/**
+ * Every heading on a page, for the "on this page" outline. Derived from the
+ * same body the page renders, so the outline cannot list a section that does
+ * not exist or skip one that does.
+ */
+export function headings(body: DocBody): { id: string; text: string; level: 2 | 3 }[] {
+  return body
+    .filter((b): b is Extract<DocBlock, { kind: "h2" | "h3" }> => b.kind === "h2" || b.kind === "h3")
+    .map((b) => ({ id: b.id, text: b.text, level: b.kind === "h2" ? (2 as const) : (3 as const) }))
 }
 
 function Block({ block }: { block: DocBlock }) {

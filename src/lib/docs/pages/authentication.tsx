@@ -1,4 +1,4 @@
-import { code, h2, h3, list, note, p, table } from "@/lib/docs/content"
+import { code, h2, list, note, ordered, p, table } from "@/lib/docs/content"
 import type { DocBody } from "@/lib/docs/content"
 
 export const authentication: DocBody = [

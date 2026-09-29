@@ -62,6 +62,26 @@ npx vercel --prod --yes
 npx vercel alias ls
 ```
 
+### The daily deployment cap
+
+```
+Error: Resource is limited - try again in 24 hours
+  (more than 100, code: "api-deployments-free-per-day")
+```
+
+The free tier allows 100 deployments per day per account, counted across
+every project, not per project. The counter resets on a rolling 24 hours, so
+there is no time of day that is reliably safe. A failed deploy leaves the
+previous build serving and changes nothing on disk, so the response to this is
+simply to wait and run the deploy again.
+
+Two habits make it less painful:
+
+- **Commit before deploying, always.** The deploy is the last step, not the
+  only step. A cap discovered after two hours of work costs a push.
+- **Do not redeploy to test a change.** A `next build` plus `next start`
+  locally answers the same question and costs nothing.
+
 **A `200` from the deployment URL is not the check.** Preview deployments sit
 behind Vercel Deployment Protection and answer every request with a 302 to
 `vercel.com/sso-api`, which looks exactly like a redirect in your own app and

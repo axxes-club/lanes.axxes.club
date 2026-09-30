@@ -47,24 +47,30 @@ export function MembersPanel({
   stats?: { cards: number; lists: number; members: number; sprints: number; comments: number; activityThisWeek: number }
 }) {
   const router = useRouter()
+  const [query, setQuery] = useState("")
+  const [newMember, setNewMember] = useState("")
+  const [newRole, setNewRole] = useState<BoardRole>("developer")
   const [pending, start] = useTransition()
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null)
 
   // Explicit rows first — somebody who was deliberately given a role is the
   // reason this screen exists — then the implicit viewers.
-  const explicit = members.filter((m) => !m.implicit)
-  const implicit = members.filter((m) => m.implicit)
+  const matches = (m: BoardMember) => `${m.name} ${m.email}`.toLowerCase().includes(query.toLowerCase())
+  const explicit = members.filter((m) => !m.implicit && matches(m))
+  const available = members.filter((m) => m.implicit && m.userId !== viewerId)
+  const implicit = members.filter((m) => m.implicit && matches(m))
 
   const act = (fn: () => Promise<{ error?: string; hint?: string }>) =>
     start(async () => {
       setError(null)
-      const result = await fn()
-      if (result.error) setError({ message: result.error, hint: result.hint })
-      router.refresh()
+      try { const result = await fn(); if (result.error) setError({ message: result.error, hint: result.hint }); else { setNewMember(""); router.refresh() } } catch (e) { setError({ message: e instanceof Error ? e.message : "Could not update membership." }) }
     })
 
   return (
     <div className="space-y-8">
+      <div className="card space-y-4 p-4"><label className="block text-sm">Search board members<input className="input mt-2 w-full" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name or email" /></label>
+      {canManage && <form className="flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); if (newMember) act(() => changeRoleAction(boardId, newMember, newRole)) }}><label className="min-w-48 flex-1 text-sm">Workspace member<select className="input mt-2 w-full" required disabled={pending} value={newMember} onChange={(e) => setNewMember(e.target.value)}><option value="">Choose a person</option>{available.filter(matches).map((m) => <option key={m.userId} value={m.userId}>{m.name} · {m.email}</option>)}</select></label><label className="text-sm">New member role<select className="input mt-2" disabled={pending} value={newRole} onChange={(e) => setNewRole(e.target.value as BoardRole)}>{BOARD_ROLES.map((role) => <option key={role} value={role}>{BOARD_ROLE_LABEL[role]}</option>)}</select></label><button className="btn-primary" disabled={pending || !newMember}>{pending ? "Saving…" : "Add member"}</button><p className="w-full text-xs text-muted">{ROLE_SUMMARY[newRole]}</p></form>}
+      </div>
       {stats && (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {([
@@ -199,11 +205,11 @@ function MemberRow({
           >
             {BOARD_ROLES.map((r) => (
               <option key={r} value={r}>
-                {BOARD_ROLE_LABEL[r]}
+                {BOARD_ROLE_LABEL[r]} — {ROLE_SUMMARY[r]}
               </option>
             ))}
           </select>
-          <button
+          {!member.implicit && <button
             type="button"
             disabled={pending}
             onClick={() => (confirming ? onRemove() : setConfirming(true))}
@@ -213,11 +219,12 @@ function MemberRow({
             title={confirming ? "Click again to confirm" : "Remove from this board"}
           >
             <IconTrash size={15} />
-          </button>
+          </button>}
+          {confirming && <p className="max-w-48 text-xs text-muted">Removing this role retains workspace viewer access. Click again to confirm.</p>}
         </div>
       ) : (
         <span className="rounded-md bg-panel-3 px-2.5 py-1.5 text-xs text-muted">
-          {isSelf ? "Your role" : BOARD_ROLE_LABEL[member.role]}
+          {isSelf ? `Your role: ${BOARD_ROLE_LABEL[member.role]}` : BOARD_ROLE_LABEL[member.role]}
         </span>
       )}
     </li>

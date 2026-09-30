@@ -238,7 +238,7 @@ export async function archiveCard(cardId: string) {
 export async function duplicateCard(cardId: string) {
   const { card, project } = await cardFor(cardId, "card.create")
   const newId = await createCard(project.id, card.listId, `${card.title} (copy)`)
-  if (newId) await db.update(s.projectCards).set({ description: card.description, priority: card.priority, dueDate: card.dueDate }).where(eq(s.projectCards.id, newId))
+  if (newId) await db.update(s.projectCards).set({ description: card.description, priority: card.priority, dueDate: card.dueDate, coverColor: card.coverColor, customFields: sql`${JSON.stringify(Object.fromEntries(Object.entries(card.customFields ?? {}).filter(([key]) => key !== "seq")))}::jsonb || jsonb_build_object('seq', ${s.projectCards.customFields}->'seq')` }).where(eq(s.projectCards.id, newId))
   refresh(project.id)
 }
 

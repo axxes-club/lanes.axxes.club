@@ -648,6 +648,7 @@ function CardTile({ card, labelsById, peopleById, overlay }: { card: CardT; labe
           ))}
         </div>
       )}
+      {card.fieldBadges && <div className="mb-2 flex flex-wrap gap-1">{card.fieldBadges.map((f) => <span key={f.name} title={`${f.name}: ${f.value}`} className="max-w-full truncate rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-muted">{f.name}: {f.value}</span>)}</div>}
       <p className={`leading-snug ${card.completedAt ? "text-muted line-through" : ""}`}>{card.title}</p>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
         <span className="font-mono">{card.key}</span>

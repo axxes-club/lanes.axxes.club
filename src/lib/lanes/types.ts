@@ -13,6 +13,8 @@ export type CardT = {
   priority: Priority
   dueDate: string | null
   completedAt: string | null
+  fieldBadges?: { name: string; value: string }[]
+  customFields?: Record<string, unknown>
   coverColor: string | null
   labelIds: string[]
   memberIds: string[]
@@ -28,6 +30,8 @@ export type BoardT = {
   name: string
   description: string | null
   color: string | null
+  fieldError?: string
+  fields?: import("./field-validation").FieldDefinition[]
   settings?: import("./settings-validation").BoardSettings
   keyPrefix: string
   lists: ListT[]

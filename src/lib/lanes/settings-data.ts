@@ -1,6 +1,7 @@
 import "server-only"
-import { asc, desc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
+import { LanesError } from "./errors"
 import { requireBoard } from "./access"
 
 /**
@@ -35,28 +36,20 @@ export type CustomField = {
 
 export async function listCustomFields(boardId: string): Promise<CustomField[]> {
   await requireBoard(boardId, "board.read")
-  return safely(
-    async () =>
-      (
-        await db
-          .select()
-          .from(s.customFields)
-          .where(eq(s.customFields.boardId, boardId))
-          .orderBy(asc(s.customFields.position))
-      ).map((f) => ({
-        id: f.id,
-        key: f.key,
-        name: f.name,
-        type: f.type,
-        // The column is nullable and the empty case is common, so it is
-        // normalised here rather than making every caller remember.
-        options: f.options ?? [],
-        required: f.required,
-        showOnCard: f.showOnCard,
-        position: f.position,
-      })),
-    [],
-  )
+  try {
+  return (await db.select().from(s.customFields).where(and(eq(s.customFields.boardId, boardId), isNull(s.customFields.deletedAt))).orderBy(asc(s.customFields.position))).map((f) => ({ id:f.id,key:f.key,name:f.name,type:f.type,options:f.options??[],required:f.required,showOnCard:f.showOnCard,position:f.position }))
+  } catch (error) {
+    const code = (error as { code?: string; cause?: { code?: string } })?.code ?? (error as { cause?: { code?: string } })?.cause?.code
+    if (code === "42703" || code === "42P01") throw new LanesError("Custom fields need the Lanes field migration before they can be edited.", 503)
+    throw error
+  }
+}
+
+export async function availableCustomFields(boardId: string): Promise<{ fields: CustomField[]; error?: string }> {
+  try { return { fields: await listCustomFields(boardId) } } catch (error) {
+    if (error instanceof LanesError && error.status === 503) return { fields: [], error: error.message }
+    throw error
+  }
 }
 
 export type Webhook = {

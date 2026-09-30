@@ -6,6 +6,7 @@ import { cx } from "@/components/ui"
 import { Avatar } from "@/components/avatar"
 import { IconArrowDown, IconArrowUp, IconPlus, IconSearch } from "@/components/icons"
 import type { BoardT, CardT, ListT, PersonT, Priority } from "@/lib/lanes/types"
+import { fieldDisplay } from "@/lib/lanes/field-validation"
 import { createCard, updateCard } from "@/lib/lanes/actions"
 
 /**
@@ -105,6 +106,7 @@ export function ListView({
               {board.settings?.enableDueDates !== false && <Header label="Due" sortKey="due" className="w-[12%]" />}
               {board.settings?.enableMembers !== false && <Header label="Assignee" className="w-[15%]" />}
               {board.settings?.enableChecklists !== false && <Header label="Progress" className="w-[8%]" />}
+              {(board.fields ?? []).map((f) => <Header key={f.id} label={f.name} />)}
             </tr>
           </thead>
           <tbody>
@@ -159,13 +161,14 @@ export function ListView({
                   {board.settings?.enableChecklists !== false && <td className="px-3 py-2.5 text-xs tabular-nums text-muted">
                     {c.checklistTotal > 0 ? `${c.checklistDone}/${c.checklistTotal}` : "—"}
                   </td>}
+                  {(board.fields ?? []).map((f) => <td key={f.id} className="px-3 py-2.5 text-xs text-muted">{fieldDisplay(f, c.customFields?.[f.key], board.people)}</td>)}
                 </tr>
               )
             })}
 
             {newLane && (
               <tr>
-                <td colSpan={6} className="px-3 py-2">
+                <td colSpan={6 + (board.fields?.length ?? 0)} className="px-3 py-2">
                   <form
                     className="flex items-center gap-2"
                     onSubmit={(e) => {

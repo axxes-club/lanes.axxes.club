@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { cx, Kbd } from "@/components/ui"
+import { CardFields } from "./card-fields"
 import { LinkedRecords } from "./link-picker"
 import { IconArrowLeft, IconArrowRight, IconClose, IconLink } from "@/components/icons"
 import type { BoardT, CardDetailT, Priority } from "@/lib/lanes/types"
@@ -173,6 +174,7 @@ export function CardPanel({
             />
           </section>
 
+          <CardFields key={`${card.id}:${JSON.stringify(card.customFields)}`} cardId={card.id} fields={board.fields ?? []} values={card.customFields ?? {}} people={board.people} canEdit={may("card.update")} onSaved={async () => { await reload(); onChanged() }} />
           <LinkedRecords cardId={card.id} links={card.links} canEdit={may("card.link")} />
 
           {features.enableChecklists !== false && <section className="space-y-4">

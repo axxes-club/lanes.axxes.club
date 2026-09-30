@@ -68,6 +68,7 @@ export const customFields = pgTable(
     position: integer("position").notNull().default(0),
     // Shown on the card face as a badge, not just in the panel.
     showOnCard: boolean("show_on_card").notNull().default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

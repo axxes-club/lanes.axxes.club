@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { requireBoard } from "./access"
 import { requireContext } from "@/lib/context"
 import { searchWorkspace, starredBoards, toggleStar, workloadFor, type SearchHit } from "./search"
 import { TEMPLATES } from "./templates"
@@ -43,7 +44,7 @@ export async function recentBoards(limit = 6) {
 }
 
 export async function setStar(boardId: string, starred: boolean) {
-  const ctx = await requireContext()
+  const { ctx } = await requireBoard(boardId, "board.read")
   await toggleStar(boardId, ctx.userId, starred)
   revalidatePath("/dashboard")
   revalidatePath(`/dashboard/b/${boardId}`)

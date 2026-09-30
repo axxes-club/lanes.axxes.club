@@ -1,7 +1,7 @@
 import "server-only"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
-import { requireBoardPermission } from "./board-access"
+import { requireBoard } from "./access"
 
 /**
  * The board settings reads.
@@ -34,7 +34,7 @@ export type CustomField = {
 }
 
 export async function listCustomFields(boardId: string): Promise<CustomField[]> {
-  await requireBoardPermission(boardId, "board.read")
+  await requireBoard(boardId, "board.read")
   return safely(
     async () =>
       (
@@ -79,7 +79,7 @@ export type Webhook = {
  * asks for.
  */
 export async function listWebhooks(boardId: string): Promise<Webhook[]> {
-  await requireBoardPermission(boardId, "webhook.manage")
+  await requireBoard(boardId, "webhook.manage")
   return safely(
     async () =>
       db
@@ -112,7 +112,7 @@ export type AuditRow = {
 }
 
 export async function listAudit(boardId: string, limit = 100): Promise<AuditRow[]> {
-  await requireBoardPermission(boardId, "audit.read")
+  await requireBoard(boardId, "audit.read")
   return safely(
     async () =>
       db
@@ -149,7 +149,7 @@ export type Integration = {
 }
 
 export async function listIntegrations(boardId: string): Promise<Integration[]> {
-  await requireBoardPermission(boardId, "integration.manage")
+  await requireBoard(boardId, "integration.manage")
   return safely(
     async () => {
       const rows = await db
@@ -191,7 +191,7 @@ export type BoardStat = {
 }
 
 export async function boardStats(boardId: string): Promise<BoardStat> {
-  await requireBoardPermission(boardId, "board.read")
+  await requireBoard(boardId, "board.read")
   return safely(
     async () => {
       const [row] = await db

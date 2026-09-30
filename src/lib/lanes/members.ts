@@ -1,8 +1,8 @@
 import "server-only"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
 import { badRequest, forbidden } from "./errors"
-import { requireBoardPermission } from "./board-access"
+import { requireBoard } from "./access"
 import { isBoardRole, type BoardRole } from "./roles"
 
 /**
@@ -41,6 +41,8 @@ export type BoardMember = {
 }
 
 export async function listBoardMembers(boardId: string, tenantId: string): Promise<BoardMember[]> {
+  const { ctx } = await requireBoard(boardId, "board.read")
+  if (ctx.tenant.id !== tenantId) throw forbidden("Workspace mismatch.")
   const roles = await db
     .select({ userId: s.boardMemberRoles.userId, role: s.boardMemberRoles.role })
     .from(s.boardMemberRoles)
@@ -55,7 +57,7 @@ export async function listBoardMembers(boardId: string, tenantId: string): Promi
     .select({ userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image })
     .from(s.tenantMemberships)
     .innerJoin(s.user, eq(s.user.id, s.tenantMemberships.userId))
-    .where(eq(s.tenantMemberships.tenantId, tenantId))
+    .where(and(eq(s.tenantMemberships.tenantId, tenantId), isNull(s.tenantMemberships.deletedAt)))
     .orderBy(asc(s.user.name))
 
   return people.map((p) => ({
@@ -81,13 +83,16 @@ async function ownerIds(boardId: string): Promise<string[]> {
 }
 
 export async function setMemberRole(boardId: string, userId: string, role: string, actorId: string) {
-  await requireBoardPermission(boardId, "board.members")
+  const { ctx } = await requireBoard(boardId, "board.members")
+  actorId = ctx.userId
   if (!isBoardRole(role)) throw badRequest(`"${role}" is not a board role.`)
 
   if (userId === actorId) {
     throw forbidden("You cannot change your own role.", "Ask another owner, or a workspace admin, to do it.")
   }
 
+  const [member] = await db.select({ id: s.tenantMemberships.id }).from(s.tenantMemberships).where(and(eq(s.tenantMemberships.tenantId, ctx.tenant.id), eq(s.tenantMemberships.userId, userId), isNull(s.tenantMemberships.deletedAt))).limit(1)
+  if (!member) throw badRequest("Choose an active member of this workspace.")
   const currentOwners = await ownerIds(boardId)
   if (currentOwners.includes(userId) && role !== "owner" && currentOwners.length <= 1) {
     throw badRequest("That would leave the board without an owner.", "Promote somebody else to owner first.")
@@ -103,7 +108,8 @@ export async function setMemberRole(boardId: string, userId: string, role: strin
 }
 
 export async function removeMember(boardId: string, userId: string, actorId: string) {
-  await requireBoardPermission(boardId, "board.members")
+  const { ctx } = await requireBoard(boardId, "board.members")
+  actorId = ctx.userId
 
   if (userId === actorId) {
     throw forbidden("You cannot remove yourself from a board you own.")

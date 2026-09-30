@@ -1,4 +1,5 @@
 import "server-only"
+import { requireBoard, requireCard } from "./access"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import type { BoardT, CardDetailT, CardT, PersonT, Priority } from "./types"
@@ -50,6 +51,7 @@ export async function getBoard(tenantId: string, boardId: string): Promise<Board
     .where(and(eq(s.projects.id, boardId), eq(s.projects.tenantId, tenantId), isNull(s.projects.deletedAt)))
     .catch(() => [])
   if (!project) return null
+  await requireBoard(boardId, "board.read")
 
   const [lists, cards, labels, people] = await Promise.all([
     db.select().from(s.projectLists).where(and(eq(s.projectLists.projectId, boardId), isNull(s.projectLists.deletedAt))).orderBy(asc(s.projectLists.position)),
@@ -143,6 +145,7 @@ export async function getCardDetail(tenantId: string, cardId: string, viewerId: 
     .where(and(eq(s.projectCards.id, cardId), eq(s.projects.tenantId, tenantId), isNull(s.projectCards.deletedAt)))
     .catch(() => [])
   if (!row) return null
+  await requireCard(cardId, "card.read")
   const { card, project } = row
 
   const [labels, members, checklists, comments, activity] = await Promise.all([

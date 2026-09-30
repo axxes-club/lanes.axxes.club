@@ -1,6 +1,6 @@
 import "server-only"
 import { cache } from "react"
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import { getContext } from "@/lib/context"
 import { can, type Permission } from "./permissions"
@@ -42,6 +42,11 @@ export const boardAccess = cache(async (boardId: string): Promise<BoardAccess> =
   if (!ctx) {
     return { role: "viewer", elevated: false, permissions: () => false }
   }
+
+  const [project] = await db.select({ id: schema.projects.id }).from(schema.projects).where(and(
+    eq(schema.projects.id, boardId), eq(schema.projects.tenantId, ctx.tenant.id), isNull(schema.projects.deletedAt),
+  )).limit(1)
+  if (!project) return { role: "viewer", elevated: false, permissions: () => false }
 
   const [row] = await db
     .select({ role: schema.boardMemberRoles.role })

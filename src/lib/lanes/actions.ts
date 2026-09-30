@@ -86,7 +86,7 @@ export async function archiveBoard(boardId: string) {
   const { ctx, project } = await boardFor(boardId, "board.delete")
   await db.update(s.projects).set({ archivedAt: new Date(), archivedById: ctx.userId, status: "archived" }).where(eq(s.projects.id, project.id))
   revalidatePath("/dashboard")
-  redirect("/dashboard")
+  refresh(boardId)
 }
 
 // ── Lists ────────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 "use client"
 
+import { ContextMenu } from "./lanes/context-menu"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { switchOrganization } from "@/lib/actions/org"
@@ -45,108 +46,24 @@ export function OrgSwitcher({
   collapsed?: boolean
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  // Collapsed and a single organization: the initial "here is your
-  // workspace" card is pure furniture, so the sidebar shows a monogram.
-  if (collapsed && memberships.length < 2) {
-    return (
-      <div
-        className="hidden place-items-center py-1.5 lg:grid"
-        title={`${current.name} · ${current.role}`}
-      >
-        <span className="grid size-8 place-items-center rounded-lg bg-panel-3 text-[11px] font-bold text-muted">
-          {current.name.slice(0, 2).toUpperCase()}
-        </span>
-      </div>
-    )
-  }
-
-  if (memberships.length < 2) {
-    return (
-      <div className={cx("rounded-lg border border-line px-2.5 py-1.5", collapsed && "lg:border-0 lg:p-0")}>
-        <p className="truncate text-xs font-medium text-text">{current.name}</p>
-        <p className="truncate text-[10px] text-muted">Your workspace</p>
-      </div>
-    )
-  }
-
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [error, setError] = useState('')
   function choose(tenantId: string) {
-    setOpen(false)
     if (tenantId === current.tenantId) return
-    startTransition(async () => {
-      await switchOrganization(tenantId)
-      router.refresh()
-    })
+    startTransition(async () => { try { await switchOrganization(tenantId); router.refresh() } catch (e) { setError(e instanceof Error ? e.message : 'Could not switch workspace.') } })
   }
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        disabled={pending}
-        className={cx(
-          "flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left transition hover:bg-panel-2 disabled:opacity-60",
-          collapsed && "lg:justify-center lg:border-0 lg:p-0",
-        )}
-      >
-        {collapsed ? (
-          <span className="grid size-8 place-items-center rounded-lg bg-panel-3 text-[11px] font-bold text-muted lg:grid">
-            {current.name.slice(0, 2).toUpperCase()}
-          </span>
-        ) : (
-          <>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-medium text-text">{current.name}</span>
-              <span className="block truncate text-[10px] text-muted capitalize">
-                {pending ? "Switching…" : current.role.replace("_", " ")}
-              </span>
-            </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
-          </>
-        )}
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <ul
-            role="listbox"
-            aria-label="Switch organization"
-            className="absolute bottom-full left-0 z-20 mb-1 w-full overflow-hidden rounded-lg border border-line bg-panel shadow-lg"
-          >
-            {memberships.map((m) => {
-              const active = m.tenantId === current.tenantId
-              return (
-                <li key={m.tenantId}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => choose(m.tenantId)}
-                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-panel-2"
-                  >
-                    <Check
-                      className={`h-3.5 w-3.5 shrink-0 ${active ? "text-accent" : "opacity-0"}`}
-                      aria-hidden
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs text-text">{m.name}</span>
-                      <span className="block truncate text-[10px] capitalize text-muted">
-                        {m.role.replace("_", " ")}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </>
-      )}
-    </div>
-  )
+  const actions = [
+    ...(memberships.length > 1 ? [{ label: 'Switch workspace', children: memberships.map((m) => ({ label: m.name, checked: m.tenantId === current.tenantId, disabled: pending, onSelect: () => choose(m.tenantId) })) }] : []),
+    { label: 'People', onSelect: () => router.push('/dashboard/people') },
+    { label: 'AXXES apps', onSelect: () => router.push('/dashboard/apps') },
+  ]
+  return <div className="relative" onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}>
+    <button type="button" aria-label={`${current.name} workspace options`} aria-haspopup="menu" disabled={pending} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }) }} onKeyDown={(e) => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }) } }} className={cx('flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left hover:bg-panel-2', collapsed && 'lg:justify-center lg:border-0 lg:p-0')}>
+      {collapsed ? <span className="grid size-8 place-items-center rounded-lg bg-panel-3 text-xs font-bold">{current.name.slice(0, 2).toUpperCase()}</span> : <><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{current.name}</span><span className="block text-[10px] text-muted">{pending ? 'Switching…' : 'Your workspace'}</span></span><ChevronsUpDown className="h-3.5 w-3.5" /></>}
+    </button>
+    {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+    {menu && <ContextMenu {...menu} items={actions} onClose={() => setMenu(null)} />}
+  </div>
 }

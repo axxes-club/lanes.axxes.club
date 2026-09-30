@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { requireContext } from "@/lib/context"
+import { boardAccess, ALL_PERMISSIONS } from "@/lib/lanes/board-access"
 import { listBoards } from "@/lib/lanes/data"
 import { starredBoards } from "@/lib/lanes/search"
 import { workspaceInsights } from "@/lib/lanes/insights"
@@ -19,6 +20,7 @@ export default async function BoardsPage() {
     workspaceInsights(ctx.tenant.id, 8),
   ])
 
+  const capabilities = new Map(await Promise.all(boards.map(async (b) => { const access = await boardAccess(b.id); return [b.id, Object.fromEntries(ALL_PERMISSIONS.map((p) => [p, access.permissions(p)]))] as const })))
   const starredIds = new Set(starred.map((b) => b.id))
   const pinned = boards.filter((b) => starredIds.has(b.id))
   const rest = boards.filter((b) => !starredIds.has(b.id))
@@ -78,7 +80,7 @@ export default async function BoardsPage() {
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {pinned.map((b) => (
-                  <BoardCard key={b.id} board={b} starred />
+                  <BoardCard key={b.id} board={b} permissions={capabilities.get(b.id)} starred />
                 ))}
               </div>
             </section>
@@ -88,7 +90,7 @@ export default async function BoardsPage() {
             <h2 className="eyebrow mb-3">{pinned.length > 0 ? "All boards" : "Your boards"}</h2>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {rest.map((b) => (
-                <BoardCard key={b.id} board={b} />
+                <BoardCard key={b.id} board={b} permissions={capabilities.get(b.id)} />
               ))}
             </div>
           </section>

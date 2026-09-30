@@ -38,10 +38,14 @@ export function ListView({
   me,
   visible,
   canEdit,
+  bulkIds = new Set(),
+  onToggleBulk,
 }: {
   board: BoardT
   me: string
   visible: (c: CardT) => boolean
+  bulkIds?: Set<string>
+  onToggleBulk?: (id: string) => void
   canEdit: boolean
 }) {
   const router = useRouter()
@@ -100,6 +104,7 @@ export function ListView({
         <table className="w-full min-w-[52rem] text-sm">
           <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b border-line">
+              {onToggleBulk && <Header label="Select" />}
               <Header label="Card" sortKey="title" className="w-[38%]" />
               <Header label="Lane" sortKey="lane" className="w-[16%]" />
               <Header label="Priority" sortKey="priority" className="w-[11%]" />
@@ -119,6 +124,7 @@ export function ListView({
                   className="cursor-pointer border-b border-line-soft transition hover:bg-panel-2"
                   onClick={() => router.push(`/dashboard/b/${board.id}?card=${c.id}`)}
                 >
+                  {onToggleBulk && <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${c.key}`} checked={bulkIds.has(c.id)} onChange={() => onToggleBulk(c.id)} /></td>}
                   <td className="px-3 py-2.5">
                     <div className="flex items-start gap-2.5">
                       <span className="mt-0.5 w-14 shrink-0 font-mono text-[11px] text-faint">{c.key}</span>

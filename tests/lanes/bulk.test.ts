@@ -1,0 +1,6 @@
+import { expect, it } from 'vitest'
+import { bulkRequestSchema, bulkPermission } from '@/lib/lanes/bulk-validation'
+const id='00000000-0000-4000-8000-000000000001'
+it('requires 1–100 distinct UUID card IDs',()=>{for(const ids of [[],[id,id],['invalid'],Array.from({length:101},(_,i)=>`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`)])expect(bulkRequestSchema.safeParse({cardIds:ids,operation:{type:'archive'}}).success).toBe(false);expect(bulkRequestSchema.safeParse({cardIds:[id],operation:{type:'archive'}}).success).toBe(true)})
+it('rejects invalid destinations, priorities, dates, and users',()=>{for(const operation of [{type:'move',listId:'bad'},{type:'priority',value:'critical'},{type:'due-date',value:'2026-02-30'},{type:'assignee-add',userId:''},{type:'archive',other:true}])expect(bulkRequestSchema.safeParse({cardIds:[id],operation}).success).toBe(false)})
+it('maps operations to precise permissions',()=>{expect(bulkPermission({type:'move',listId:id})).toBe('card.move');expect(bulkPermission({type:'priority',value:'high'})).toBe('card.priority');expect(bulkPermission({type:'archive'})).toBe('card.delete');expect(bulkPermission({type:'assignee-remove',userId:'u'})).toBe('card.assign');expect(bulkPermission({type:'due-date',value:null})).toBe('card.update')})

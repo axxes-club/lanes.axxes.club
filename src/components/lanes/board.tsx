@@ -40,6 +40,7 @@ import { ListView } from "./list-view"
 import { ShortcutsSheet } from "@/components/shortcuts-sheet"
 import { PokerPanel } from "./poker-panel"
 import { cardPresentation, BOARD_COLORS } from "@/lib/lanes/settings-validation"
+import { BulkToolbar } from "./bulk-toolbar"
 import { ConfirmDialog } from "./confirm-dialog"
 import { InputDialog } from "./input-dialog"
 import { cardMenuItems, listMenuItems, boardMenuItems } from "./menu-actions"
@@ -102,6 +103,10 @@ export function Board({
   // The card the keyboard is pointing at. Kept separate from `openCard` so
   // arrow keys can move a selection without opening anything — you scan down
   // a list, then press enter.
+  const [bulkIds, setBulkIds] = useState<Set<string>>(new Set())
+  const toggleBulk = (id: string) => setBulkIds((ids) => { const next = new Set(ids); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  useEffect(() => { setBulkIds(new Set()) }, [board.id])
+  useEffect(() => { setBulkIds((ids) => new Set([...ids].filter((id) => board.cards.some((c) => c.id === id)))) }, [board.cards])
   const [selected, setSelected] = useState<string | null>(null)
   // The view lives in the URL so a filtered board is a bookmark, and so the
   // back button moves between views rather than leaving the board.
@@ -413,8 +418,10 @@ export function Board({
         </div>
       </div>
 
+      <div className="mb-2 flex items-center gap-2"><input type="checkbox" aria-label="Select all visible cards" checked={cards.filter(visible).length > 0 && cards.filter(visible).every((c) => bulkIds.has(c.id))} onChange={(e) => setBulkIds(e.target.checked ? new Set(cards.filter(visible).map((c) => c.id)) : new Set())} /><span className="text-xs text-muted">Select visible cards</span></div>
+      <BulkToolbar board={board} ids={[...bulkIds]} can={can} onClear={() => setBulkIds(new Set())} />
       {view === "list" ? (
-        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} />
+        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} bulkIds={bulkIds} onToggleBulk={toggleBulk} />
       ) : (
       /* Lanes */
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
@@ -434,6 +441,8 @@ export function Board({
                 onAdd={(title) => run(() => createCard(board.id, list.id, title))}
                 canAdd={may("card.create")}
                 canSort={may("board.update")}
+                bulkIds={bulkIds}
+                onToggleBulk={toggleBulk}
                 selected={selected}
                 onSelect={(id) => { setSelected(id); setOpenCard(id) }}
               />
@@ -490,7 +499,7 @@ export function Board({
 }
 
 function Lane({
-  list, cards, visible, labelsById, peopleById, onOpen, onCardMenu, onListMenu, onAdd, canAdd, canSort,
+  list, cards, visible, labelsById, peopleById, onOpen, onCardMenu, onListMenu, onAdd, canAdd, canSort, bulkIds, onToggleBulk,
   selected, onSelect,
 }: {
   list: ListT
@@ -510,6 +519,8 @@ function Lane({
   selected: string | null
   /** Enter on a highlighted card. */
   onSelect: (id: string) => void
+  bulkIds: Set<string>
+  onToggleBulk: (id: string) => void
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" }, disabled: !canSort })
   const [adding, setAdding] = useState(false)
@@ -561,6 +572,8 @@ function Lane({
               peopleById={peopleById}
               onOpen={onOpen}
               onMenu={onCardMenu}
+              bulkIds={bulkIds}
+              onToggleBulk={onToggleBulk}
               selected={selected}
               onSelect={onSelect}
             />
@@ -603,6 +616,8 @@ function SortableCard({ card, hidden, ...rest }: {
   labelsById: Map<string, { name: string; color: string }>
   peopleById: Map<string, PersonT>
   onOpen: (id: string) => void
+  bulkIds: Set<string>
+  onToggleBulk: (id: string) => void
   onMenu: (c: CardT, x: number, y: number) => void
   /** The card the keyboard is pointing at, highlighted with a ring. */
   selected: string | null
@@ -628,6 +643,7 @@ function SortableCard({ card, hidden, ...rest }: {
         rest.selected === card.id ? "ring-2 ring-accent ring-offset-2 ring-offset-panel" : ""
       }`}
     >
+      <input type="checkbox" aria-label={`Select ${card.key}`} checked={rest.bulkIds.has(card.id)} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onChange={() => rest.onToggleBulk(card.id)} className="float-left relative z-10 m-2" />
       <button type="button" aria-label={`${card.key} options`} className="float-right relative z-10 rounded px-2 py-1 text-muted hover:text-text" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); rest.onMenu(card, r.left, r.bottom) }}>⋯</button>
       <CardTile card={card} labelsById={rest.labelsById} peopleById={rest.peopleById} />
     </div>

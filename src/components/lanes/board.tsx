@@ -39,6 +39,7 @@ import { CardPanel } from "./card-panel"
 import { ListView } from "./list-view"
 import { ShortcutsSheet } from "@/components/shortcuts-sheet"
 import { PokerPanel } from "./poker-panel"
+import { cardPresentation, BOARD_COLORS } from "@/lib/lanes/settings-validation"
 import { ConfirmDialog } from "./confirm-dialog"
 import { InputDialog } from "./input-dialog"
 import { cardMenuItems, listMenuItems, boardMenuItems } from "./menu-actions"
@@ -90,6 +91,7 @@ export function Board({
   const [dragging, setDragging] = useState<CardT | null>(null)
   const [confirmation, setConfirmation] = useState<{ title: string; description: string; action: () => Promise<unknown> } | null>(null)
   const [inputDialog, setInputDialog] = useState<{ title: string; initial: string; type?: "text" | "number"; save: (value: string) => Promise<unknown> } | null>(null)
+  const [mutationError, setMutationError] = useState("")
   const [dialogError, setDialogError] = useState("")
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   // Track which deep link has been honoured, so a re-render does not keep
@@ -191,8 +193,8 @@ export function Board({
   }, [selected])
 
   const run = (fn: () => Promise<unknown>) => start(async () => {
-    await fn()
-    router.refresh()
+    setMutationError("")
+    try { await fn(); router.refresh() } catch (e) { setMutationError(e instanceof Error ? e.message : "Could not save. Try again."); setCards(board.cards); setLists(board.lists) }
   })
 
   /**
@@ -322,8 +324,8 @@ export function Board({
   const cardMenu = (card: CardT, x: number, y: number) => setMenu({ x, y, items: cardMenuItems([
     { label: "Open card", shortcut: "↵", onSelect: () => setOpenCard(card.id) },
     { label: card.memberIds.includes(me) ? "Leave card" : "Assign to me", permission: "card.assign", onSelect: () => run(() => toggleCardMember(card.id, me)) },
-    { label: "Assignees", permission: "card.assign", children: board.people.map((p) => ({ label: p.name, checked: card.memberIds.includes(p.id), onSelect: () => run(() => toggleCardMember(card.id, p.id)) })) },
-    { label: "Labels", permission: "card.update", children: board.labels.map((l) => ({ label: l.name, checked: card.labelIds.includes(l.id), onSelect: () => run(() => toggleCardLabel(card.id, l.id)) })) },
+    { label: "Assignees", permission: "card.assign", children: (board.settings?.enableMembers === false ? [] : board.people).map((p) => ({ label: p.name, checked: card.memberIds.includes(p.id), onSelect: () => run(() => toggleCardMember(card.id, p.id)) })) },
+    { label: "Labels", permission: "card.update", children: (board.settings?.enableLabels === false ? [] : board.labels).map((l) => ({ label: l.name, checked: card.labelIds.includes(l.id), onSelect: () => run(() => toggleCardLabel(card.id, l.id)) })) },
     { label: "Move to", permission: "card.move", children: lists.map((l) => ({ label: l.name, disabled: l.id === card.listId, onSelect: () => run(() => moveCard(card.id, l.id, cardsIn(l.id).length)) })) },
     { label: "Priority", permission: "card.priority", children: (["urgent", "high", "medium", "low"] as const).map((p) => ({ label: p, checked: card.priority === p, onSelect: () => run(() => updateCard(card.id, { priority: p })) })) },
     { label: "Copy link", onSelect: () => { void navigator.clipboard.writeText(`${location.origin}/dashboard/b/${board.id}?card=${card.id}`) } },
@@ -338,6 +340,7 @@ export function Board({
     { label: "Rename lane", permission: "board.update", onSelect: () => setInputDialog({ title: "Lane name", initial: list.name, save: (name) => updateList(board.id, list.id, { name }) }) },
     { label: "Set WIP limit", permission: "board.update", onSelect: () => setInputDialog({ title: "WIP limit (blank for none)", initial: String(list.wipLimit ?? ""), type: "number", save: (value) => updateList(board.id, list.id, { wipLimit: value ? Number(value) : null }) }) },
     { label: "Cards here count as done", permission: "board.update", checked: list.isDoneList, onSelect: () => run(() => updateList(board.id, list.id, { isDoneList: !list.isDoneList })) },
+    { label: "Column color", permission: "board.update", children: [{ label: "Default", onSelect: () => run(() => updateList(board.id, list.id, { color: null })) }, ...BOARD_COLORS.map((color) => ({ label: color, onSelect: () => run(() => updateList(board.id, list.id, { color })) }))] },
     { separator: true },
     { label: "Delete lane", permission: "board.update", danger: true, onSelect: () => askDelete(`Delete ${list.name}?`, "The lane and its cards will be removed from the board.", () => deleteList(board.id, list.id)) },
   ], can) })
@@ -351,6 +354,7 @@ export function Board({
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-6rem)]">
+      {mutationError && <p role="alert" className="mb-3 text-sm text-danger">{mutationError}</p>}
       {readOnly && (
         <p className="no-print mb-3 rounded-lg border border-line bg-panel-2 px-3 py-2 text-xs text-muted">
           You have read-only access to this board. Ask an owner for a role if you need to change anything.
@@ -410,7 +414,7 @@ export function Board({
       </div>
 
       {view === "list" ? (
-        <ListView board={board} me={me} visible={visible} canEdit={may("card.create")} />
+        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} />
       ) : (
       /* Lanes */
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
@@ -420,7 +424,7 @@ export function Board({
               <Lane
                 key={list.id}
                 list={list}
-                cards={cardsIn(list.id)}
+                cards={cardsIn(list.id).map((c) => cardPresentation(c, board.settings))}
                 visible={visible}
                 labelsById={labelsById}
                 peopleById={peopleById}
@@ -429,7 +433,7 @@ export function Board({
                 onListMenu={listMenu}
                 onAdd={(title) => run(() => createCard(board.id, list.id, title))}
                 canAdd={may("card.create")}
-                canSort={draggable}
+                canSort={may("board.update")}
                 selected={selected}
                 onSelect={(id) => { setSelected(id); setOpenCard(id) }}
               />
@@ -437,7 +441,7 @@ export function Board({
           </SortableContext>
           {may("board.update") && <AddLane onAdd={(n) => run(() => createList(board.id, n))} />}
         </div>
-        <DragOverlay>{dragging && <CardTile card={dragging} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
+        <DragOverlay>{dragging && <CardTile card={cardPresentation(dragging, board.settings)} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
       </DndContext>
       )}
 
@@ -507,7 +511,7 @@ function Lane({
   /** Enter on a highlighted card. */
   onSelect: (id: string) => void
 }) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" } })
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" }, disabled: !canSort })
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState("")
   const shown = cards.filter(visible)
@@ -516,7 +520,7 @@ function Lane({
   return (
     <section
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition, borderTopColor: list.color ?? undefined, borderTopWidth: list.color ? 3 : undefined }}
       className={`flex max-h-full w-72 shrink-0 flex-col rounded-xl border bg-panel ${over ? "border-danger/60" : "border-line"} ${isDragging ? "opacity-50" : ""}`}
       tabIndex={0}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); onListMenu(list, r.left, r.bottom) } }}

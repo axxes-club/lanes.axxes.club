@@ -52,6 +52,10 @@ export function CardPanel({
   onNavigate?: (direction: 1 | -1) => void
   can?: Record<string, boolean>
 }) {
+  const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
+  const may = (permission: string) => can[permission] === true
+  const features = board.settings ?? {}
   const [card, setCard] = useState<CardDetailT | null>(null)
   const [title, setTitle] = useState("")
   const [desc, setDesc] = useState("")
@@ -69,7 +73,7 @@ export function CardPanel({
   }, [cardId])
 
   useEffect(() => {
-    reload()
+    void reload().catch((e) => setError(e instanceof Error ? e.message : "Could not load card."))
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") return onClose()
       // Arrow keys move between cards, the way every inbox worth using does.
@@ -91,15 +95,15 @@ export function CardPanel({
 
   // Every mutation: save, then re-read the card and refresh the board behind it
   const act = async (fn: () => Promise<unknown>) => {
-    await fn()
-    await reload()
-    onChanged()
+    if (saving) return
+    setError(""); setSaving(true)
+    try { await fn(); await reload(); onChanged() } catch (e) { setError(e instanceof Error ? e.message : "Could not save. Try again.") } finally { setSaving(false) }
   }
 
   if (!card) {
     return (
       <Shell onClose={onClose}>
-        <p className="p-8 text-sm text-muted">Loading…</p>
+        <p role={error ? "alert" : "status"} className="p-8 text-sm text-muted">{error || "Loading…"}</p>
       </Shell>
     )
   }
@@ -121,6 +125,7 @@ export function CardPanel({
             value={card.listId}
             onChange={(e) => act(() => moveCard(card.id, e.target.value, 0))}
             className="rounded-md border border-line bg-panel-2 px-2 py-1 text-text"
+            disabled={!may("card.move") || saving}
             aria-label="Lane"
           >
             {board.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -141,6 +146,7 @@ export function CardPanel({
         </span>
       </div>
 
+      {error && <p role="alert" className="px-6 py-2 text-sm text-danger">{error}</p>}
       <div className="grid flex-1 gap-8 overflow-y-auto p-6 md:grid-cols-[1fr_220px]">
         <div className="min-w-0 space-y-6">
           <textarea
@@ -149,6 +155,7 @@ export function CardPanel({
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title.trim() && title !== card.title && act(() => updateCard(card.id, { title }))}
             className="w-full resize-none rounded-md bg-transparent text-xl font-semibold leading-snug outline-none focus:bg-panel-2"
+            readOnly={!may("card.update") || saving}
             aria-label="Card title"
           />
 
@@ -161,16 +168,17 @@ export function CardPanel({
               onBlur={() => desc !== (card.description ?? "") && act(() => updateCard(card.id, { description: desc }))}
               placeholder="Add more detail…"
               className="input min-h-28"
+              readOnly={!may("card.update") || saving}
               aria-label="Description"
             />
           </section>
 
-          <LinkedRecords cardId={card.id} links={card.links} canEdit={can["card.update"] !== false} />
+          <LinkedRecords cardId={card.id} links={card.links} canEdit={may("card.link")} />
 
-          <section className="space-y-4">
+          {features.enableChecklists !== false && <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-medium tracking-wider text-muted uppercase">Checklists</h3>
-              <button type="button" className="text-xs text-accent hover:underline" onClick={() => act(() => addChecklist(card.id, "Checklist"))}>+ Add checklist</button>
+              <button disabled={!may("card.update") || saving} type="button" className="text-xs text-accent hover:underline" onClick={() => act(() => addChecklist(card.id, "Checklist"))}>+ Add checklist</button>
             </div>
             {card.checklists.map((cl) => {
               const done = cl.items.filter((i) => i.done).length
@@ -186,9 +194,9 @@ export function CardPanel({
                   <ul className="space-y-1">
                     {cl.items.map((it) => (
                       <li key={it.id} className="group flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={it.done} onChange={() => act(() => toggleChecklistItem(card.id, it.id))} className="size-4 accent-[var(--accent)]" aria-label={it.text} />
+                        <input disabled={!may("card.update") || saving} type="checkbox" checked={it.done} onChange={() => act(() => toggleChecklistItem(card.id, it.id))} className="size-4 accent-[var(--accent)]" aria-label={it.text} />
                         <span className={`flex-1 ${it.done ? "text-muted line-through" : ""}`}>{it.text}</span>
-                        <button type="button" className="text-xs text-muted opacity-0 hover:text-danger group-hover:opacity-100" onClick={() => act(() => deleteChecklistItem(card.id, it.id))} aria-label={`Delete ${it.text}`}>✕</button>
+                        <button type="button" className="text-xs text-muted opacity-0 hover:text-danger group-hover:opacity-100" disabled={!may("card.update") || saving} onClick={() => act(() => deleteChecklistItem(card.id, it.id))} aria-label={`Delete ${it.text}`}>✕</button>
                       </li>
                     ))}
                   </ul>
@@ -202,19 +210,19 @@ export function CardPanel({
                       act(() => addChecklistItem(card.id, cl.id, text))
                     }}
                   >
-                    <input value={newItem[cl.id] ?? ""} onChange={(e) => setNewItem({ ...newItem, [cl.id]: e.target.value })} placeholder="Add an item and press Enter" className="input h-8" aria-label={`New item in ${cl.title}`} />
+                    <input disabled={!may("card.update") || saving} value={newItem[cl.id] ?? ""} onChange={(e) => setNewItem({ ...newItem, [cl.id]: e.target.value })} placeholder="Add an item and press Enter" className="input h-8" aria-label={`New item in ${cl.title}`} />
                   </form>
                 </div>
               )
             })}
-          </section>
+          </section>}
 
           <section>
             <div className="mb-3 flex gap-4 text-xs font-medium uppercase tracking-wider">
-              <button type="button" className={tab === "comments" ? "text-text" : "text-muted"} onClick={() => setTab("comments")}>Comments ({card.commentsList.length})</button>
+              <button type="button" hidden={features.enableComments === false} className={tab === "comments" ? "text-text" : "text-muted"} onClick={() => setTab("comments")}>Comments ({card.commentsList.length})</button>
               <button type="button" className={tab === "activity" ? "text-text" : "text-muted"} onClick={() => setTab("activity")}>Activity</button>
             </div>
-            {tab === "comments" ? (
+            {tab === "comments" && features.enableComments !== false ? (
               <div className="space-y-3">
                 <form
                   onSubmit={(e) => {
@@ -225,9 +233,9 @@ export function CardPanel({
                     act(() => addComment(card.id, text))
                   }}
                 >
-                  <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Write a comment…" className="input" aria-label="New comment"
+                  <textarea disabled={!may("card.comment") || saving} value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Write a comment…" className="input" aria-label="New comment"
                     onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) (e.currentTarget.form as HTMLFormElement).requestSubmit() }} />
-                  <button className="btn-primary mt-2 h-8 px-3" disabled={!comment.trim()}>Comment</button>
+                  <button className="btn-primary mt-2 h-8 px-3" disabled={!comment.trim() || !may("card.comment") || saving}>Comment</button>
                 </form>
                 {[...card.commentsList].reverse().map((c) => (
                   <div key={c.id} className="rounded-lg bg-panel-2 p-3 text-sm">
@@ -252,46 +260,47 @@ export function CardPanel({
         </div>
 
         <aside className="space-y-5 text-sm">
-          <Side label="Assignees">
+          {features.enableMembers !== false && <Side label="Assignees">
             <div className="flex flex-wrap gap-1.5">
               {board.people.map((p) => {
                 const on = card.memberIds.includes(p.id)
                 return (
-                  <button key={p.id} type="button" onClick={() => act(() => toggleCardMember(card.id, p.id))}
+                  <button disabled={!may("card.assign") || saving} key={p.id} type="button" onClick={() => act(() => toggleCardMember(card.id, p.id))}
                     className={`rounded-full px-2.5 py-1 text-xs ring-1 ${on ? "bg-accent text-accent-ink ring-accent" : "text-muted ring-line hover:text-text"}`}>
                     {p.id === me ? "Me" : p.name.split(" ")[0]}
                   </button>
                 )
               })}
             </div>
-          </Side>
-          <Side label="Labels">
+          </Side>}
+          {features.enableLabels !== false && <Side label="Labels">
             <div className="flex flex-wrap gap-1.5">
               {board.labels.map((l) => {
                 const on = card.labelIds.includes(l.id)
                 return (
-                  <button key={l.id} type="button" onClick={() => act(() => toggleCardLabel(card.id, l.id))}
+                  <button disabled={!may("card.update") || saving} key={l.id} type="button" onClick={() => act(() => toggleCardLabel(card.id, l.id))}
                     className={`rounded px-2 py-1 text-xs font-semibold ${on ? "text-white" : "text-muted opacity-60 ring-1 ring-line"}`} style={on ? { background: l.color } : undefined}>
                     {l.name}
                   </button>
                 )
               })}
             </div>
-          </Side>
+          </Side>}
           <Side label="Priority">
-            <select value={card.priority} onChange={(e) => act(() => updateCard(card.id, { priority: e.target.value as Priority }))} className="input h-9" aria-label="Priority">
+            <select disabled={!may("card.priority") || saving} value={card.priority} onChange={(e) => act(() => updateCard(card.id, { priority: e.target.value as Priority }))} className="input h-9" aria-label="Priority">
               {PRIORITIES.map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
             </select>
           </Side>
-          <Side label="Due date">
+          {features.enableDueDates !== false && <Side label="Due date">
             <input
+              disabled={!may("card.update") || saving}
               type="date"
               value={card.dueDate ? card.dueDate.slice(0, 10) : ""}
               onChange={(e) => act(() => updateCard(card.id, { dueDate: e.target.value ? `${e.target.value}T17:00:00` : null }))}
               className="input h-9"
               aria-label="Due date"
             />
-          </Side>
+          </Side>}
           {card.completedAt && <p className="text-xs text-emerald-400">Completed {since(card.completedAt)}</p>}
         </aside>
       </div>

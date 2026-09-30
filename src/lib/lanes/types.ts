@@ -28,6 +28,7 @@ export type BoardT = {
   name: string
   description: string | null
   color: string | null
+  settings?: import("./settings-validation").BoardSettings
   keyPrefix: string
   lists: ListT[]
   cards: CardT[]

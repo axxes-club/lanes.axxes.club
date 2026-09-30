@@ -103,6 +103,7 @@ export async function getBoard(tenantId: string, boardId: string): Promise<Board
     description: project.description,
     color: project.color,
     keyPrefix: prefix,
+    settings: project.settings ?? {},
     lists: lists.map((l) => ({ id: l.id, name: l.name, position: l.position, wipLimit: l.wipLimit, isDoneList: !!l.isDoneList, color: l.color })),
     cards: cards.map((c) => toCard(c, prefix, labelMap.get(c.id), memberMap.get(c.id), checkMap.get(c.id), commentMap.get(c.id))),
     labels: labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),

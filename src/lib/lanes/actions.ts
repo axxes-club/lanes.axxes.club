@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { listSettingsSchema } from "./settings-validation"
 import { requireBoard as boardFor, requireCard as cardFor } from "./access"
 import { requireBoardPermission } from "./board-access"
 import { recordActivity as log } from "./activity"
@@ -102,17 +103,25 @@ export async function createList(boardId: string, name: string) {
   refresh(boardId)
 }
 
-export async function updateList(boardId: string, listId: string, patch: { name?: string; wipLimit?: number | null; isDoneList?: boolean }) {
-  const { project } = await boardFor(boardId, "board.update")
-  await db
-    .update(s.projectLists)
-    .set({
-      ...(patch.name !== undefined ? { name: patch.name.trim().slice(0, 80) || "Untitled" } : {}),
-      ...(patch.wipLimit !== undefined ? { wipLimit: patch.wipLimit && patch.wipLimit > 0 ? Math.min(99, patch.wipLimit) : null } : {}),
-      ...(patch.isDoneList !== undefined ? { isDoneList: patch.isDoneList } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(s.projectLists.id, listId), eq(s.projectLists.projectId, project.id)))
+export async function updateList(boardId: string, listId: string, patch: { name?: string; wipLimit?: number | null; isDoneList?: boolean; color?: string | null }) {
+  const { ctx, project } = await boardFor(boardId, "board.update")
+  const clean = listSettingsSchema.parse(patch)
+  const result = await db.execute(sql`
+    with changed as (
+      update project_lists set name = coalesce(${clean.name ?? null}, name),
+        wip_limit = case when ${clean.wipLimit !== undefined} then ${clean.wipLimit ?? null}::integer else wip_limit end,
+        color = case when ${clean.color !== undefined} then ${clean.color ?? null}::text else color end,
+        is_done_list = coalesce(${clean.isDoneList ?? null}::boolean, is_done_list), updated_at = now()
+      where id = ${listId}::uuid and project_id = ${project.id}::uuid and deleted_at is null returning id, is_done_list
+    ), completed as (
+      update project_cards c set completed_at = case when l.is_done_list then coalesce(c.completed_at, now()) else null end,
+        completed_by_id = case when l.is_done_list then coalesce(c.completed_by_id, ${ctx.userId}) else null end, updated_at = now()
+      from changed l where c.list_id = l.id and c.project_id = ${project.id}::uuid and c.deleted_at is null and c.archived_at is null and ${clean.isDoneList !== undefined} returning c.id
+    ), activity as (
+      insert into project_activity (id, project_id, tenant_id, user_id, list_id, type, description, created_at)
+      select gen_random_uuid(), ${project.id}::uuid, ${ctx.tenant.id}::uuid, ${ctx.userId}, id, 'list.updated', 'updated column settings', now() from changed
+    ) select id from changed`)
+  if (!result.rows.length) throw new Error("Lane not found")
   refresh(boardId)
 }
 

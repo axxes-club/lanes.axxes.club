@@ -13,6 +13,7 @@ import { IconKey, IconLayers, IconPuzzle, IconShield, IconUsers, IconWebhook } f
  * clicking is a settings page people describe in prose instead.
  */
 const TABS = [
+  { key: "general", label: "General", Icon: IconKey },
   { key: "people", label: "People", Icon: IconUsers },
   { key: "fields", label: "Custom fields", Icon: IconLayers },
   { key: "integrations", label: "Integrations", Icon: IconPuzzle },

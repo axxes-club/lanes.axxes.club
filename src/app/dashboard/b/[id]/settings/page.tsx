@@ -5,6 +5,7 @@ import { getBoard } from "@/lib/lanes/data"
 import { boardAccess } from "@/lib/lanes/board-access"
 import { boardStats, listAudit, listCustomFields, listIntegrations, listWebhooks } from "@/lib/lanes/settings-data"
 import { PageHeader } from "@/components/ui"
+import { GeneralSettingsPanel } from "@/components/lanes/general-settings-panel"
 import { MembersPanel } from "@/components/lanes/members-panel"
 import { SettingsTabs } from "@/components/lanes/settings-tabs"
 import { FieldsPanel, IntegrationsPanel, WebhooksPanel, AuditPanel } from "@/components/lanes/settings-panels"
@@ -66,6 +67,7 @@ export default async function BoardSettingsPage({
         counts={{ people: members.filter((m) => !m.implicit).length, fields: fields.length, integrations: integrations.length, webhooks: hooks.length, audit: audit.length }}
       />
 
+      {tab === "general" && <GeneralSettingsPanel board={board} canManage={access.permissions("board.settings")} />}
       {(tab ?? "people") === "people" && (
         <MembersPanel
           boardId={board.id}

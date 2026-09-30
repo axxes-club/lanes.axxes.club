@@ -1,3 +1,9 @@
+# Release 1 schema changes
+
+`custom_fields.deleted_at timestamptz` supports soft deletion. `(board_id,key)` remains unique across active and deleted definitions. Card JSON retains deleted values without rendering them. `_lanesFieldVersion` in project settings guards definition/value/duplication writes against stale validation; `_lanesBulkVersion` guards bulk writes. Both merge with existing settings. Saved views reuse `saved_views` with validated state and creator/shared authorization.
+
+Apply only `scripts/lanes-custom-fields.sql`; do not apply broad shared-platform DDL for this release. Historical database counts below are snapshots, not current row counts.
+
 # Data model
 
 Every table Lanes owns, its status, and the gaps. Status was read from the live

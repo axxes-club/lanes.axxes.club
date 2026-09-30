@@ -61,6 +61,7 @@ function MenuLevel({ x, y, items, close, back }: { x: number; y: number; items: 
         <button key={index} ref={(node) => { if (node) buttons.current.set(index, node); else buttons.current.delete(index) }} type="button" role={item.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'} aria-checked={item.checked !== undefined ? item.checked : undefined} aria-haspopup={item.children ? 'menu' : undefined} aria-expanded={item.children ? sub?.index === index : undefined} disabled={item.disabled} tabIndex={-1}
           className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-panel-2 focus:bg-panel-2 focus:outline-none disabled:opacity-40 ${item.danger ? 'text-danger' : ''}`}
           onClick={() => activate(index)} onKeyDown={(event) => {
+            if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowRight', 'ArrowLeft', 'Enter', ' ', 'Tab'].includes(event.key)) event.stopPropagation()
             let next: number | undefined
             const current = enabled.indexOf(index)
             if (event.key === 'ArrowDown') next = enabled[(current + 1) % enabled.length]
@@ -73,7 +74,7 @@ function MenuLevel({ x, y, items, close, back }: { x: number; y: number; items: 
             if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(index) }
             if (event.key === 'Tab') { event.preventDefault(); close() }
           }}>
-          <span className="w-3 text-accent">{item.checked ? '✓' : ''}</span><span className="flex-1">{item.label}</span>{item.shortcut && <span className="text-xs text-muted">{item.shortcut}</span>}{item.children && <span aria-hidden>›</span>}
+          <span className="w-3 text-accent">{item.checked ? '✓' : ''}</span><span className="flex-1">{item.label}</span>{item.shortcut && <span aria-hidden className="text-xs text-muted">{item.shortcut}</span>}{item.children && <span aria-hidden>›</span>}
         </button>)}
     </div>
     {sub && !items[sub.index].separator && <MenuLevel x={sub.x} y={sub.y} items={(items[sub.index] as Exclude<MenuItem, { separator: true }>).children ?? []} close={close} back={() => { const index = sub.index; setSub(null); buttons.current.get(index)?.focus() }} />}

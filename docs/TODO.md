@@ -1,3 +1,14 @@
+# Approved expansion follow-up
+
+Release 1 customization foundation is implemented. See [STATE](./STATE.md) for shipped scope and [approved design](./superpowers/specs/2026-09-30-lanes-product-expansion-design.md) for releases 2–5.
+
+- [ ] Import preview, mapping, resumable jobs and source provenance for Monday/Jira/Trello and CSV.
+- [ ] Deeper AXXES app links and integration relationships.
+- [ ] Expanded customization, advanced views and automation.
+- [ ] Authenticated two-user and touch end-to-end tests against an isolated deployed environment.
+
+The historical backlog below may contain obsolete status; current release status is authoritative in STATE.md.
+
 # TODO
 
 The ordered backlog. Written to be picked up cold.
@@ -137,4 +148,4 @@ The public API is two routes. Everything else is internal.
 - [ ] **Mobile.** A delivery tool people check on a phone needs a real answer
       here. Drag-and-drop is the whole product; it has to work by touch or
       mobile is a checkbox, not a feature.
-- [ ] **Bulk edit** — select many, change list/assignee/due date at once.
+- [x] **Bulk edit** — visible selection, atomic list/assignee/due-date/priority/archive actions.

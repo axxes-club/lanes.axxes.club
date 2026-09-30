@@ -173,12 +173,12 @@ export function Board({
 
   const visible = (c: CardT) => {
     if (q && !`${c.key} ${c.title} ${c.description ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false
-    if (viewState.labelIds.length && !viewState.labelIds.some((id) => c.labelIds.includes(id))) return false
-    if (viewState.memberIds.length && !viewState.memberIds.some((id) => c.memberIds.includes(id))) return false
+    if (board.settings?.enableLabels !== false && viewState.labelIds.length && !viewState.labelIds.some((id) => c.labelIds.includes(id))) return false
+    if (board.settings?.enableMembers !== false && viewState.memberIds.length && !viewState.memberIds.some((id) => c.memberIds.includes(id))) return false
     if (viewState.priorities.length && !viewState.priorities.includes(c.priority)) return false
-    if (due === "none" && c.dueDate) return false
-    if (due === "overdue" && !(c.dueDate && !c.completedAt && Date.parse(c.dueDate) < Date.now())) return false
-    if (due === "week" && !(c.dueDate && Date.parse(c.dueDate) < Date.now() + 7 * 86_400_000)) return false
+    if (board.settings?.enableDueDates !== false && due === "none" && c.dueDate) return false
+    if (board.settings?.enableDueDates !== false && due === "overdue" && !(c.dueDate && !c.completedAt && Date.parse(c.dueDate) < Date.now())) return false
+    if (board.settings?.enableDueDates !== false && due === "week" && !(c.dueDate && Date.parse(c.dueDate) < Date.now() + 7 * 86_400_000)) return false
     return true
   }
   const cardsIn = (listId: string) => cards.filter((c) => c.listId === listId).sort((a, b) => {
@@ -230,6 +230,7 @@ export function Board({
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || menu || confirmation || inputDialog || document.querySelector("dialog[open]")) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (isTypingTarget(e.target)) return
       if (openCard || pokerCard) return
@@ -346,7 +347,7 @@ export function Board({
   const askDelete = (title: string, description: string, action: () => Promise<unknown>) => { setDialogError(""); setConfirmation({ title, description, action }) }
   const cardMenu = (card: CardT, x: number, y: number) => setMenu({ x, y, items: cardMenuItems([
     { label: "Open card", shortcut: "↵", onSelect: () => setOpenCard(card.id) },
-    { label: card.memberIds.includes(me) ? "Leave card" : "Assign to me", permission: "card.assign", onSelect: () => run(() => toggleCardMember(card.id, me)) },
+    { label: card.memberIds.includes(me) ? "Leave card" : "Assign to me", permission: board.settings?.enableMembers === false ? "feature.disabled" : "card.assign", onSelect: () => run(() => toggleCardMember(card.id, me)) },
     { label: "Assignees", permission: "card.assign", children: (board.settings?.enableMembers === false ? [] : board.people).map((p) => ({ label: p.name, checked: card.memberIds.includes(p.id), onSelect: () => run(() => toggleCardMember(card.id, p.id)) })) },
     { label: "Labels", permission: "card.update", children: (board.settings?.enableLabels === false ? [] : board.labels).map((l) => ({ label: l.name, checked: card.labelIds.includes(l.id), onSelect: () => run(() => toggleCardLabel(card.id, l.id)) })) },
     { label: "Move to", permission: "card.move", children: lists.map((l) => ({ label: l.name, disabled: l.id === card.listId, onSelect: () => run(() => moveCard(card.id, l.id, cardsIn(l.id).length)) })) },
@@ -417,21 +418,21 @@ export function Board({
             ))}
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter cards…" className="input h-9 w-44" aria-label="Filter cards" />
-          <select value={label} onChange={(e) => setLabel(e.target.value)} className="input h-9 w-auto" aria-label="Filter by label">
+          {board.settings?.enableLabels !== false && <select value={label} onChange={(e) => setLabel(e.target.value)} className="input h-9 w-auto" aria-label="Filter by label">
             <option value="">All labels</option>
             {board.labels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select value={person === me ? "me" : person} onChange={(e) => setPerson(e.target.value)} className="input h-9 w-auto" aria-label="Filter by person">
+          </select>}
+          {board.settings?.enableMembers !== false && <select value={person === me ? "me" : person} onChange={(e) => setPerson(e.target.value)} className="input h-9 w-auto" aria-label="Filter by person">
             <option value="">Everyone</option>
             <option value="me">Assigned to me</option>
             {board.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select value={due} onChange={(e) => setDue(e.target.value as Due)} className="input h-9 w-auto" aria-label="Filter by due date">
+          </select>}
+          {board.settings?.enableDueDates !== false && <select value={due} onChange={(e) => setDue(e.target.value as Due)} className="input h-9 w-auto" aria-label="Filter by due date">
             <option value="all">Any due date</option>
             <option value="overdue">Overdue</option>
             <option value="week">Due this week</option>
             <option value="none">No due date</option>
-          </select>
+          </select>}
           <select className="input h-9 w-auto" aria-label="Filter by priority" value={viewState.priorities[0] ?? ""} onChange={(e) => setViewState({ ...viewState, priorities: e.target.value ? [e.target.value as CardT['priority']] : [] })}><option value="">Any priority</option>{["urgent", "high", "medium", "low"].map((p) => <option key={p} value={p}>{p}</option>)}</select>
           {filtering && <button type="button" className="btn-ghost h-9" onClick={() => { setViewState(viewStateSchema.parse({ sort: viewState.sort })) }}>Clear</button>}
         </div>
@@ -676,7 +677,7 @@ function CardTile({ card, labelsById, peopleById, overlay }: { card: CardT; labe
   return (
     <article
       className={`cursor-pointer rounded-lg border border-line bg-panel-2 p-3 text-sm transition hover:border-accent/50 ${overlay ? "rotate-2 shadow-2xl" : ""}`}
-      style={{ borderLeft: `3px solid ${PRIORITY_COLOR[card.priority] === "transparent" ? "var(--line)" : PRIORITY_COLOR[card.priority]}` }}
+      style={{ borderTop: card.coverColor ? `4px solid ${card.coverColor}` : undefined, borderLeft: `3px solid ${PRIORITY_COLOR[card.priority] === "transparent" ? "var(--line)" : PRIORITY_COLOR[card.priority]}` }}
     >
       {card.labelIds.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">

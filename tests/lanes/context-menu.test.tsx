@@ -48,3 +48,12 @@ it('dismisses outside and prevents disabled pointer actions', () => {
  fireEvent.click(screen.getByRole('menuitem',{name:/Disabled/}));expect(select).not.toHaveBeenCalled()
  fireEvent.pointerDown(document.body);expect(close).toHaveBeenCalledTimes(1)
 })
+
+it('keeps menu Enter away from board shortcuts and excludes decorative shortcut names', () => {
+ const shortcut=vi.fn();window.addEventListener('keydown',shortcut)
+ try {
+ render(<ContextMenu x={10} y={10} onClose={vi.fn()} items={[{label:'Move',shortcut:'↵',children:[{label:'Done'}]}]} />)
+ fireEvent.keyDown(screen.getByRole('menuitem',{name:'Move',exact:true}),{key:'Enter'})
+ expect(shortcut).not.toHaveBeenCalled()
+ } finally {window.removeEventListener('keydown',shortcut)}
+})

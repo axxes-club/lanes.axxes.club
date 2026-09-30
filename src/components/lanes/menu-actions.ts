@@ -1,7 +1,7 @@
 import type { MenuItem } from './context-menu'
 export type PermittedMenuItem = MenuItem & { permission?: string }
 export function permittedMenuItems(items: PermittedMenuItem[], permissions: Record<string, boolean>): MenuItem[] {
-  const allowed = items.filter((item) => !item.permission || permissions[item.permission])
+  const allowed = items.filter((item) => (!item.permission || permissions[item.permission]) && (item.separator || !item.children || item.children.length > 0))
   return allowed.filter((item, i) => !item.separator || (i > 0 && i < allowed.length - 1 && !allowed[i - 1].separator))
 }
 export const cardMenuItems = permittedMenuItems

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { workspaceRoleRank } from "./roles"
+import { duplicateCardStatement } from "./duplicate-sql"
+import { listCustomFields } from "./settings-data"
 import { forbidden } from "./errors"
 import { listSettingsSchema } from "./settings-validation"
 import { requireBoard as boardFor, requireCard as cardFor } from "./access"
@@ -101,7 +103,7 @@ export async function createList(boardId: string, name: string) {
   const clean = name.trim().slice(0, 80)
   if (!clean) return
   const [{ max }] = await db.select({ max: sql<number>`coalesce(max(${s.projectLists.position}), -1)`.mapWith(Number) }).from(s.projectLists).where(eq(s.projectLists.projectId, project.id))
-  const [list] = await db.insert(s.projectLists).values({ projectId: project.id, name: clean, position: max + 1 }).returning()
+  const [list] = await db.insert(s.projectLists).values({ projectId: project.id, name: clean, color: (project.settings as { defaultListColor?: string } | null)?.defaultListColor ?? null, position: max + 1 }).returning()
   await log(ctx, project.id, "list.created", `added the lane “${clean}”`, null, list.id)
   await touch(project.id)
   refresh(boardId)
@@ -240,9 +242,11 @@ export async function archiveCard(cardId: string) {
 }
 
 export async function duplicateCard(cardId: string) {
-  const { card, project } = await cardFor(cardId, "card.create")
-  const newId = await createCard(project.id, card.listId, `${card.title} (copy)`)
-  if (newId) await db.update(s.projectCards).set({ description: card.description, priority: card.priority, dueDate: card.dueDate, coverColor: card.coverColor, customFields: sql`${JSON.stringify(Object.fromEntries(Object.entries(card.customFields ?? {}).filter(([key]) => key !== "seq")))}::jsonb || jsonb_build_object('seq', ${s.projectCards.customFields}->'seq')` }).where(eq(s.projectCards.id, newId))
+  const { ctx, card, project } = await cardFor(cardId, "card.create")
+  await listCustomFields(project.id)
+  const version = Number((project.settings as Record<string, unknown> | null)?._lanesFieldVersion ?? 0)
+  const result = await db.execute(duplicateCardStatement(project.id,card.id,ctx.userId,ctx.tenant.id,version))
+  if (!result.rows.length) throw new Error("The board changed. Refresh and try duplicating again.")
   refresh(project.id)
 }
 

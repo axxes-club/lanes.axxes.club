@@ -1,3 +1,15 @@
+# Release 1 deployment — 2026-09-30
+
+Deploy the verified `feat/lanes-foundation` checkout to the linked Vercel project with `vercel --prod --yes`. Production environment variables stay in Vercel; never commit local environment files. `vercel pull` on this account returns secret placeholders, so they cannot be used for local database checks.
+
+Before deploying, apply only the additive idempotent migration `scripts/lanes-custom-fields.sql` against the configured shared database. Verify the column in `information_schema.columns` and confirm `saved_views` exists. No broad migration is required.
+
+Checks: `npm test`, `npx tsc --noEmit`, `npm run build`, `git diff --check`. Client fixture smoke: start Vite with `node node_modules/vite/bin/vite.js --config tests/browser/vite.config.mts`, then `node tests/browser/smoke.mjs` with Playwright installed; `LANES_CHROMIUM_PATH` optionally specifies an existing Chromium executable. Fixtures use mocked server actions and do not prove SSO or authenticated production data writes.
+
+After Vercel reports Ready, verify the alias homepage/docs, dashboard redirects to sign-in, token-protected API rejects unauthenticated requests, and production dev-auth refuses access. Deployment URL and actual outcomes are recorded below after deployment.
+
+Historical runbook follows; any older deployment blockers are superseded by the current release record.
+
 # Runbook
 
 ## Environment

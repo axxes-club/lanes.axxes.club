@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { cx } from "@/components/ui"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { IconArrowRight, IconCheck, IconClose, IconPlus, IconSearch } from "@/components/icons"
 import { TEMPLATES, type Template } from "@/lib/lanes/templates"
 import { createBoard } from "@/lib/lanes/actions"
@@ -180,17 +180,54 @@ export function QuickCreate() {
 }
 
 /** Watches the URL for ?new=1, so the palette can open the dialog. */
-export function NewBoardTrigger() {
+/**
+ * The "New board" button and its dialog (one per page).
+ *
+ * The dialog also opens whenever the URL carries `?new=1` — the command palette
+ * links there — so it reads the search params reactively rather than only on
+ * mount (a client-side navigation to the same page doesn't remount it).
+ * Extra call sites use `buttonOnly`, which fires OPEN_NEW_BOARD so the page's
+ * single dialog answers.
+ */
+export const OPEN_NEW_BOARD = "lanes:new-board"
+
+export function NewBoardTrigger({ buttonOnly = false, label = "New board" }: { buttonOnly?: boolean; label?: string }) {
+  const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const wanted = params.get("new") === "1"
 
   useEffect(() => {
-    const check = () => setOpen(new URLSearchParams(window.location.search).get("new") === "1")
-    check()
-    window.addEventListener("popstate", check)
-    return () => window.removeEventListener("popstate", check)
-  }, [])
+    if (buttonOnly) return
+    if (wanted) setOpen(true)
+    const onOpen = () => setOpen(true)
+    window.addEventListener(OPEN_NEW_BOARD, onOpen)
+    return () => window.removeEventListener(OPEN_NEW_BOARD, onOpen)
+  }, [wanted, buttonOnly])
 
-  return <NewBoardDialog open={open} onClose={() => setOpen(false)} />
+  const close = () => {
+    setOpen(false)
+    if (wanted) router.replace(pathname, { scroll: false })
+  }
+
+  const button = (
+    <button
+      type="button"
+      className="btn-primary btn-md"
+      onClick={() => (buttonOnly ? window.dispatchEvent(new Event(OPEN_NEW_BOARD)) : setOpen(true))}
+    >
+      <IconPlus size={14} /> {label}
+    </button>
+  )
+
+  if (buttonOnly) return button
+  return (
+    <>
+      {button}
+      <NewBoardDialog open={open} onClose={close} />
+    </>
+  )
 }
 
 /**

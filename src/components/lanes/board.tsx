@@ -465,6 +465,8 @@ export function Board({
             // Return the highlight where the panel was, so a person who
             // pressed escape to go back lands on the card they were reading.
             setSelected(openCard)
+            // Pull server truth so the tile shows what was just edited
+            router.refresh()
           }}
           onNavigate={(direction) => {
             const at = walkable.indexOf(openCard)

@@ -67,7 +67,7 @@ export default async function BoardsPage() {
           icon={<IconBoard size={20} />}
           title="No boards yet"
           body="Pick a template and you will have lanes, labels and a board your team can use today."
-          action={<NewBoardTrigger />}
+          action={<NewBoardTrigger buttonOnly label="Pick a template" />}
         />
       ) : (
         <>

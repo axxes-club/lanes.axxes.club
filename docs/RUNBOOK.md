@@ -1,6 +1,6 @@
 # Release 1 deployment — 2026-09-30
 
-Deploy the verified `feat/lanes-foundation` checkout to the linked Vercel project with `vercel --prod --yes`. Production environment variables stay in Vercel; never commit local environment files. `vercel pull` on this account returns secret placeholders, so they cannot be used for local database checks.
+Deploy the verified `main` checkout to the linked Vercel project with `vercel --prod --yes`. Production environment variables stay in Vercel; never commit local environment files. `vercel pull` on this account returns secret placeholders, so they cannot be used for local database checks.
 
 Before deploying, apply only the additive idempotent migration `scripts/lanes-custom-fields.sql` against the configured shared database. Verify the column in `information_schema.columns` and confirm `saved_views` exists. No broad migration is required.
 
@@ -154,3 +154,8 @@ role matrix has never run against a real row. When the screens land, test the
 **permissions** first — a board where a viewer can move a card is a data
 integrity problem, and a permissions bug found in production is found by
 somebody else.
+## Release preflight evidence
+
+2026-09-30: 70 tests / 15 files passed after integrating remote main. Production build passed (25 routes); TypeScript and whitespace checks passed. Desktop/mobile fixture smoke passed including bottom-right submenu geometry and keyboard isolation. The additive custom_fields.deleted_at migration was applied and its timestamptz type verified. Existing saved_views schema confirmed. Organization context and app catalog checks passed; organization opener checks use `node scripts/check-organization-open.mjs /dashboard`.
+
+No authenticated production mutation or two-user SSO browser flow was performed. PostgreSQL atomicity evidence is from isolated PGlite, not concurrent Neon connections.

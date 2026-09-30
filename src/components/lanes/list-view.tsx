@@ -40,17 +40,25 @@ export function ListView({
   canEdit,
   bulkIds = new Set(),
   onToggleBulk,
+  sort: controlledSort,
+  onSortChange,
+  mode = "table",
 }: {
   board: BoardT
   me: string
   visible: (c: CardT) => boolean
+  sort?: Sort
+  onSortChange?: (sort: Sort) => void
+  mode?: "list" | "table"
   bulkIds?: Set<string>
   onToggleBulk?: (id: string) => void
   canEdit: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [sort, setSort] = useState<Sort>({ key: "position", dir: 1 })
+  const [localSort, setLocalSort] = useState<Sort>({ key: "position", dir: 1 })
+  const sort = controlledSort ?? localSort
+  const setSort = (update: (previous: Sort) => Sort) => { const next = update(sort); if (onSortChange) onSortChange(next); else setLocalSort(next) }
   const [newLane, setNewLane] = useState<string | null>(null)
 
   const listsById = useMemo(() => new Map(board.lists.map((l) => [l.id, l])), [board.lists])
@@ -101,7 +109,7 @@ export function ListView({
   return (
     <div className="min-h-0 flex-1 overflow-auto pb-8">
       <div className="card overflow-hidden">
-        <table className="w-full min-w-[52rem] text-sm">
+        <table aria-label={mode === "table" ? "Cards table" : "Cards list"} className={`w-full text-sm ${mode === "table" ? "min-w-[52rem]" : "min-w-[38rem]"}`}>
           <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b border-line">
               {onToggleBulk && <Header label="Select" />}

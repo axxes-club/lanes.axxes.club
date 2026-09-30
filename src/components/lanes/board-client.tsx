@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { viewStateSchema, type SavedViewState } from "@/lib/lanes/view-validation"
 import { Board } from "./board"
 import { BoardToolbar } from "./board-toolbar"
 import { setStar } from "@/lib/lanes/commands"
@@ -33,6 +34,8 @@ export function BoardClient({
   chrome: BoardChrome
 }) {
   const router = useRouter()
+  const [viewState, setViewState] = useState<SavedViewState>(() => viewStateSchema.parse({}))
+  const [starError, setStarError] = useState("")
   const [starred, setStarred] = useState(chrome.starred)
   const [, start] = useTransition()
 
@@ -40,8 +43,8 @@ export function BoardClient({
     (next: boolean) => {
       setStarred(next)
       start(async () => {
-        await setStar(board.id, next)
-        router.refresh()
+        setStarError("")
+        try { await setStar(board.id, next); router.refresh() } catch (e) { setStarred(!next); setStarError(e instanceof Error ? e.message : "Could not save star.") }
       })
     },
     [board.id, router],
@@ -49,6 +52,7 @@ export function BoardClient({
 
   return (
     <>
+      {starError && <p role="alert" className="text-sm text-danger">{starError}</p>}
       <BoardToolbar
         boardId={board.id}
         boardName={board.name}
@@ -56,7 +60,7 @@ export function BoardClient({
         onStarChange={changeStar}
       />
       <div className="min-h-0 flex-1">
-        <Board board={board} me={me} can={can} focusCard={focusCard} starred={starred} onStarChange={changeStar} />
+        <Board viewState={viewState} onViewStateChange={setViewState} savedViews={chrome.savedViews} board={board} me={me} can={can} focusCard={focusCard} starred={starred} onStarChange={changeStar} />
       </div>
     </>
   )

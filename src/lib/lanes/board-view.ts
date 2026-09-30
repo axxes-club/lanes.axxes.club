@@ -1,4 +1,6 @@
 import "server-only"
+import { listSavedViews } from "./view-actions"
+import type { SavedView } from "./view-validation"
 import { and, eq } from "drizzle-orm"
 import { db, schema as s } from "@/lib/db"
 import { listSprints, activeSprint } from "./sprints"
@@ -21,6 +23,7 @@ import { can, type Permission } from "./permissions"
  */
 
 export type BoardChrome = {
+  savedViews: SavedView[]
   role: string
   elevated: boolean
   permissions: Record<string, boolean>
@@ -40,7 +43,7 @@ export type BoardChrome = {
 
 const CHECKED: Permission[] = [
   "board.read", "board.update", "board.settings", "board.members", "board.delete",
-  "card.create", "card.update", "card.move", "card.delete", "card.assign", "card.priority", "card.comment", "card.verify",
+  "card.create", "card.update", "card.move", "card.delete", "card.assign", "card.priority", "card.comment", "card.verify", "card.link", "card.estimate",
   "sprint.read", "sprint.manage", "sprint.commit", "sprint.complete",
   "poker.read", "poker.facilitate",
   "backlog.write", "backlog.groom",
@@ -48,10 +51,11 @@ const CHECKED: Permission[] = [
 ]
 
 export async function boardChrome(boardId: string, userId: string): Promise<BoardChrome> {
-  const [access, sprints, current] = await Promise.all([
+  const [access, sprints, current, savedViews] = await Promise.all([
     boardAccess(boardId),
     listSprints(boardId).catch(() => []),
     activeSprint(boardId).catch(() => null),
+    listSavedViews(boardId),
   ])
 
   const permissions: Record<string, boolean> = {}
@@ -74,6 +78,7 @@ export async function boardChrome(boardId: string, userId: string): Promise<Boar
   }
 
   return {
+    savedViews,
     role: access.role,
     elevated: access.elevated,
     permissions,

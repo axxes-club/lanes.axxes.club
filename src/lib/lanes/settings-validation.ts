@@ -1,5 +1,5 @@
 import { z } from 'zod'
-export const BOARD_COLORS = ['#5b8cff', '#6366f1', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'] as const
+export const BOARD_COLORS = ['#5b8cff', '#6366f1', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b', '#60a5fa', '#a78bfa', '#14b8a6', '#f472b6', '#94a3b8'] as const
 const color = z.enum(BOARD_COLORS).nullable()
 export const boardSettingsSchema = z.strictObject({
   name: z.string().trim().min(1).max(100).optional(), description: z.string().max(5000).nullable().optional(), color: color.optional(), cardColor: color.optional(), defaultListColor: color.optional(),

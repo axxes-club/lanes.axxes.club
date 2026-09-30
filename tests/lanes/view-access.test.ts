@@ -1,0 +1,16 @@
+import { beforeAll, afterAll, expect, it, vi } from 'vitest'
+import { PGlite } from '@electric-sql/pglite'
+import { drizzle } from 'drizzle-orm/pg-proxy'
+const state=vi.hoisted(()=>({pg:null as any,user:'alice',canShare:false,revoked:false,db:null as any}))
+vi.mock('next/cache',()=>({revalidatePath:vi.fn()}))
+vi.mock('@/lib/db',async()=>({schema:await import('../../src/lib/db/schema'),db:new Proxy({},{get:(_,key)=>state.db[key]})}))
+vi.mock('@/lib/lanes/access',()=>({requireBoard:async(id:string,permission:string)=>{if(state.revoked||id!=='00000000-0000-4000-8000-000000000001'||(permission==='board.update'&&!state.canShare))throw new Error('Forbidden');return {ctx:{userId:state.user,tenant:{id:'tenant'}}}}}))
+vi.mock('@/lib/lanes/board-access',()=>({requireBoardPermission:async()=>{if(!state.canShare||state.revoked)throw new Error('Forbidden')}}))
+vi.mock('@/lib/lanes/data',()=>({workspacePeople:async()=>[{id:'alice'},{id:'bob'}]}))
+import { saveView,listSavedViews,updateView,deleteView } from '@/lib/lanes/view-actions'
+const board='00000000-0000-4000-8000-000000000001',input={name:'My view',view:'board' as const,state:{text:'urgent'},isShared:false}
+beforeAll(async()=>{state.pg=new PGlite();state.db=drizzle(async(sql,params,method)=>{const result=await state.pg.query(sql,params);return {rows:method==='all'?result.rows.map((row:any)=>Object.values(row)):result.rows}});await state.pg.exec(`create table saved_views(id uuid primary key default gen_random_uuid(),board_id uuid,user_id text,name text,view text default 'board',state jsonb default '{}',is_shared boolean default false,position integer default 0,created_at timestamptz default now(),updated_at timestamptz default now());create table project_labels(id uuid,project_id uuid);`)})
+afterAll(async()=>{await state.pg?.close()})
+it('isolates personal views and rejects another user edits/deletes',async()=>{await saveView(board,input);const own=await listSavedViews(board);expect(own).toHaveLength(1);state.user='bob';expect(await listSavedViews(board)).toHaveLength(0);await expect(updateView(board,own[0].id,input)).rejects.toThrow('creator');await expect(deleteView(board,own[0].id)).rejects.toThrow('creator');state.user='alice';expect((await listSavedViews(board))[0].state.text).toBe('urgent')})
+it('requires board update to publish/edit shared views but allows reading',async()=>{await expect(saveView(board,{...input,isShared:true})).rejects.toThrow('Forbidden');state.canShare=true;await saveView(board,{...input,name:'Shared',isShared:true});const shared=(await listSavedViews(board)).find(v=>v.isShared)!;state.user='bob';state.canShare=false;expect(await listSavedViews(board)).toHaveLength(1);await expect(updateView(board,shared.id,{...input,isShared:true})).rejects.toThrow('Forbidden');state.canShare=true;await updateView(board,shared.id,{...input,name:'Updated shared',isShared:true});expect((await listSavedViews(board))[0].name).toBe('Updated shared')})
+it('rejects foreign boards, removed references and revoked read access',async()=>{await expect(listSavedViews('00000000-0000-4000-8000-000000000002')).rejects.toThrow();await expect(saveView(board,{...input,state:{memberIds:['removed']}})).rejects.toThrow('no longer available');state.revoked=true;await expect(listSavedViews(board)).rejects.toThrow('Forbidden');state.revoked=false})

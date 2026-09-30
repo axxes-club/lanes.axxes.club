@@ -40,6 +40,8 @@ import { ListView } from "./list-view"
 import { ShortcutsSheet } from "@/components/shortcuts-sheet"
 import { PokerPanel } from "./poker-panel"
 import { cardPresentation, BOARD_COLORS } from "@/lib/lanes/settings-validation"
+import { SavedViews } from "./saved-views"
+import { viewStateSchema, reconcileViewState, type SavedViewState, type SavedView, type ViewMode } from "@/lib/lanes/view-validation"
 import { BulkToolbar } from "./bulk-toolbar"
 import { ConfirmDialog } from "./confirm-dialog"
 import { InputDialog } from "./input-dialog"
@@ -74,7 +76,13 @@ export function Board({
   focusCard = null,
   starred = false,
   onStarChange,
+  viewState: controlledViewState,
+  onViewStateChange,
+  savedViews = [],
 }: {
+  viewState?: SavedViewState
+  onViewStateChange?: (state: SavedViewState) => void
+  savedViews?: SavedView[]
   board: BoardT
   me: string
   can: Record<string, boolean>
@@ -83,6 +91,10 @@ export function Board({
   starred?: boolean
   onStarChange?: (next: boolean) => void
 }) {
+  const [localViewState, setLocalViewState] = useState<SavedViewState>(() => viewStateSchema.parse({}))
+  const viewState = controlledViewState ?? localViewState
+  const setViewState = onViewStateChange ?? setLocalViewState
+  const [viewNotice, setViewNotice] = useState("")
   const chromeStar = starred
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -110,27 +122,28 @@ export function Board({
   const [selected, setSelected] = useState<string | null>(null)
   // The view lives in the URL so a filtered board is a bookmark, and so the
   // back button moves between views rather than leaving the board.
-  const [view, setView] = useState<"board" | "list">("board")
+  const [view, setView] = useState<ViewMode>("board")
 
   useEffect(() => {
     const initial = new URLSearchParams(window.location.search).get("view")
-    if (initial === "list" || initial === "board") setView(initial)
+    if (initial === "list" || initial === "board" || initial === "table") setView(initial)
   }, [])
 
   const switchView = useCallback(
-    (next: "board" | "list") => {
+    (next: ViewMode) => {
       setView(next)
       const url = new URL(window.location.href)
-      if (next === "list") url.searchParams.set("view", "list")
+      if (next !== "board") url.searchParams.set("view", next)
       else url.searchParams.delete("view")
       router.replace(url.toString(), { scroll: false })
     },
     [router],
   )
-  const [q, setQ] = useState("")
-  const [label, setLabel] = useState<string>("")
-  const [person, setPerson] = useState<string>("")
-  const [due, setDue] = useState<Due>("all")
+  const q = viewState.text, label = viewState.labelIds[0] ?? "", person = viewState.memberIds[0] ?? "", due = viewState.due
+  const setQ = (text: string) => setViewState({ ...viewState, text })
+  const setLabel = (label: string) => setViewState({ ...viewState, labelIds: label ? [label] : [] })
+  const setPerson = (person: string) => setViewState({ ...viewState, memberIds: person ? [person === "me" ? me : person] : [] })
+  const setDue = (due: Due) => setViewState({ ...viewState, due })
   const [name, setName] = useState(board.name)
 
   // Server truth replaces local state after every refresh
@@ -151,7 +164,7 @@ export function Board({
 
   const labelsById = useMemo(() => new Map(board.labels.map((l) => [l.id, l])), [board.labels])
   const peopleById = useMemo(() => new Map(board.people.map((p) => [p.id, p])), [board.people])
-  const filtering = !!(q || label || person || due !== "all")
+  const filtering = !!(q || viewState.labelIds.length || viewState.memberIds.length || viewState.priorities.length || due !== "all")
 
   // One helper rather than a dozen `can["..."]` lookups in the JSX: it reads
   // better and it is the single place a future permission change lands.
@@ -160,14 +173,19 @@ export function Board({
 
   const visible = (c: CardT) => {
     if (q && !`${c.key} ${c.title} ${c.description ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false
-    if (label && !c.labelIds.includes(label)) return false
-    if (person && !(person === "me" ? c.memberIds.includes(me) : c.memberIds.includes(person))) return false
+    if (viewState.labelIds.length && !viewState.labelIds.some((id) => c.labelIds.includes(id))) return false
+    if (viewState.memberIds.length && !viewState.memberIds.some((id) => c.memberIds.includes(id))) return false
+    if (viewState.priorities.length && !viewState.priorities.includes(c.priority)) return false
     if (due === "none" && c.dueDate) return false
     if (due === "overdue" && !(c.dueDate && !c.completedAt && Date.parse(c.dueDate) < Date.now())) return false
     if (due === "week" && !(c.dueDate && Date.parse(c.dueDate) < Date.now() + 7 * 86_400_000)) return false
     return true
   }
-  const cardsIn = (listId: string) => cards.filter((c) => c.listId === listId).sort((a, b) => a.position - b.position)
+  const cardsIn = (listId: string) => cards.filter((c) => c.listId === listId).sort((a, b) => {
+    const rank = { low: 1, medium: 2, high: 3, urgent: 4 }
+    const value = (c: CardT): string | number => viewState.sort.key === "title" ? c.title.toLowerCase() : viewState.sort.key === "priority" ? rank[c.priority] : viewState.sort.key === "due" ? (c.dueDate ? Date.parse(c.dueDate) : Number.MAX_SAFE_INTEGER) : c.position
+    const av = value(a), bv = value(b); return av === bv ? a.position - b.position : (av > bv ? 1 : -1) * viewState.sort.dir
+  })
 
   /**
    * The order J and K walk.
@@ -218,7 +236,7 @@ export function Board({
 
       const clearFilters = () => {
         if (!filtering) return false
-        setQ(""); setLabel(""); setPerson(""); setDue("all")
+        setViewState(viewStateSchema.parse({ sort: viewState.sort }))
         return true
       }
 
@@ -278,7 +296,7 @@ export function Board({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  const draggable = may("card.move")
+  const draggable = may("card.move") && viewState.sort.key === "position"
   const listOf = (id: string) => (lists.some((l) => l.id === id) ? id : cards.find((c) => c.id === id)?.listId)
 
   const onDragStart = (e: DragStartEvent) => setDragging(cards.find((c) => c.id === e.active.id) ?? null)
@@ -384,7 +402,7 @@ export function Board({
         {pending && <span className="text-xs text-muted">Saving…</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-0.5 rounded-lg border border-line bg-panel-2 p-0.5" role="group" aria-label="View">
-            {(["board", "list"] as const).map((v) => (
+            {(["board", "list", "table"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -403,7 +421,7 @@ export function Board({
             <option value="">All labels</option>
             {board.labels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
-          <select value={person} onChange={(e) => setPerson(e.target.value)} className="input h-9 w-auto" aria-label="Filter by person">
+          <select value={person === me ? "me" : person} onChange={(e) => setPerson(e.target.value)} className="input h-9 w-auto" aria-label="Filter by person">
             <option value="">Everyone</option>
             <option value="me">Assigned to me</option>
             {board.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -414,14 +432,17 @@ export function Board({
             <option value="week">Due this week</option>
             <option value="none">No due date</option>
           </select>
-          {filtering && <button type="button" className="btn-ghost h-9" onClick={() => { setQ(""); setLabel(""); setPerson(""); setDue("all") }}>Clear</button>}
+          <select className="input h-9 w-auto" aria-label="Filter by priority" value={viewState.priorities[0] ?? ""} onChange={(e) => setViewState({ ...viewState, priorities: e.target.value ? [e.target.value as CardT['priority']] : [] })}><option value="">Any priority</option>{["urgent", "high", "medium", "low"].map((p) => <option key={p} value={p}>{p}</option>)}</select>
+          {filtering && <button type="button" className="btn-ghost h-9" onClick={() => { setViewState(viewStateSchema.parse({ sort: viewState.sort })) }}>Clear</button>}
         </div>
       </div>
 
+      <SavedViews boardId={board.id} views={savedViews} state={viewState} view={view} me={me} canShare={may("board.update")} onApply={(saved) => { const result = reconcileViewState(saved.state, board.labels.map((l) => l.id), board.people.map((p) => p.id)); setViewState(result.state); switchView(saved.view); setViewNotice(result.removed ? `${result.removed} unavailable filters were removed from this view.` : "") }} />
+      {viewNotice && <p role="status" className="mb-2 text-xs text-muted">{viewNotice}</p>}
       <div className="mb-2 flex items-center gap-2"><input type="checkbox" aria-label="Select all visible cards" checked={cards.filter(visible).length > 0 && cards.filter(visible).every((c) => bulkIds.has(c.id))} onChange={(e) => setBulkIds(e.target.checked ? new Set(cards.filter(visible).map((c) => c.id)) : new Set())} /><span className="text-xs text-muted">Select visible cards</span></div>
       <BulkToolbar board={board} ids={[...bulkIds]} can={can} onClear={() => setBulkIds(new Set())} />
-      {view === "list" ? (
-        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} bulkIds={bulkIds} onToggleBulk={toggleBulk} />
+      {view !== "board" ? (
+        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} bulkIds={bulkIds} onToggleBulk={toggleBulk} sort={viewState.sort} onSortChange={(sort) => setViewState({ ...viewState, sort })} mode={view} />
       ) : (
       /* Lanes */
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>

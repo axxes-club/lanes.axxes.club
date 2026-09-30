@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { workspaceRoleRank } from "./roles"
+import { forbidden } from "./errors"
 import { listSettingsSchema } from "./settings-validation"
 import { requireBoard as boardFor, requireCard as cardFor } from "./access"
 import { requireBoardPermission } from "./board-access"
@@ -29,6 +31,7 @@ async function renumber(table: typeof s.projectCards | typeof s.projectLists, id
 
 export async function createBoard(form: FormData) {
   const ctx = await requireContext()
+  if (workspaceRoleRank(ctx.role) < 1) throw forbidden("Workspace viewers cannot create boards.")
   const name = String(form.get("name") ?? "").trim().slice(0, 100)
   if (!name) throw new Error("Give the board a name")
   const color = String(form.get("color") ?? "") || "#5b8cff"
@@ -56,6 +59,7 @@ export async function createBoard(form: FormData) {
     })
     .returning()
 
+  await db.insert(s.boardMemberRoles).values({ boardId: project.id, userId: ctx.userId, role: "owner" })
   await db.insert(s.projectLists).values(
     chosen.lists.map((l, i) => ({
       projectId: project.id,

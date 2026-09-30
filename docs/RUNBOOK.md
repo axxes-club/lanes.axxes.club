@@ -159,3 +159,7 @@ somebody else.
 2026-09-30: 70 tests / 15 files passed after integrating remote main. Production build passed (25 routes); TypeScript and whitespace checks passed. Desktop/mobile fixture smoke passed including bottom-right submenu geometry and keyboard isolation. The additive custom_fields.deleted_at migration was applied and its timestamptz type verified. Existing saved_views schema confirmed. Organization context and app catalog checks passed; organization opener checks use `node scripts/check-organization-open.mjs /dashboard`.
 
 No authenticated production mutation or two-user SSO browser flow was performed. PostgreSQL atomicity evidence is from isolated PGlite, not concurrent Neon connections.
+
+## Deployment outcome
+
+2026-09-30: Release code was pushed to origin/main at `9059ebc`. `vercel --prod --yes` uploaded the source but was rejected with `api-deployments-free-per-day` (more than 100; retry after 24 hours). `vercel list lanes.axxes.club` showed only the previous Ready production deployment from two hours earlier; no new deployment was created. The public homepage remains HTTP200 on that previous release. This customization release is **not yet live**. Retry `vercel --prod --yes` from main when the quota resets, then run the post-deployment HTTP checks above.

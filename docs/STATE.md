@@ -2,7 +2,7 @@
 
 ## Lanes customization release — 2026-09-30
 
-Merged into `main`, preserving newer remote branding, app launcher and collapsed-sidebar changes. Deployment verification is recorded in the runbook.
+Merged into `main`, preserving newer remote branding, app launcher and collapsed-sidebar changes. The production deploy was blocked by Vercel’s daily quota; this release is not yet live. Details and the retry command are recorded in the runbook.
 
 - Tenant-scoped board/card authorization for existing mutations, including board creation ownership.
 - Keyboard-accessible context menus for boards, columns, cards and workspace switching, with touch overflow controls and destructive confirmations.

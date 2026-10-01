@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities"
 import type { BoardT, CardT, ListT, PersonT } from "@/lib/lanes/types"
 import {
   archiveCard,
+  archiveBoard,
   createCard,
   createList,
   deleteCard,
@@ -30,6 +31,7 @@ import {
   renameBoard,
   reorderLists,
   toggleCardMember,
+  toggleCardLabel,
   updateCard,
   updateList,
 } from "@/lib/lanes/actions"
@@ -37,6 +39,10 @@ import { CardPanel } from "./card-panel"
 import { ListView } from "./list-view"
 import { ShortcutsSheet } from "@/components/shortcuts-sheet"
 import { PokerPanel } from "./poker-panel"
+import { cardPresentation, BOARD_COLORS } from "@/lib/lanes/settings-validation"
+import { ConfirmDialog } from "./confirm-dialog"
+import { InputDialog } from "./input-dialog"
+import { cardMenuItems, listMenuItems, boardMenuItems } from "./menu-actions"
 import { ContextMenu, type MenuItem } from "./context-menu"
 
 type Due = "all" | "overdue" | "week" | "none"
@@ -83,6 +89,10 @@ export function Board({
   const [cards, setCards] = useState(board.cards)
   const [openCard, setOpenCard] = useState<string | null>(null)
   const [dragging, setDragging] = useState<CardT | null>(null)
+  const [confirmation, setConfirmation] = useState<{ title: string; description: string; action: () => Promise<unknown> } | null>(null)
+  const [inputDialog, setInputDialog] = useState<{ title: string; initial: string; type?: "text" | "number"; save: (value: string) => Promise<unknown> } | null>(null)
+  const [mutationError, setMutationError] = useState("")
+  const [dialogError, setDialogError] = useState("")
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   // Track which deep link has been honoured, so a re-render does not keep
   // re-opening the same card and trapping the panel shut.
@@ -140,7 +150,7 @@ export function Board({
 
   // One helper rather than a dozen `can["..."]` lookups in the JSX: it reads
   // better and it is the single place a future permission change lands.
-  const may = (permission: string) => can[permission] !== false
+  const may = (permission: string) => can[permission] === true
   const readOnly = !may("card.update")
 
   const visible = (c: CardT) => {
@@ -183,8 +193,8 @@ export function Board({
   }, [selected])
 
   const run = (fn: () => Promise<unknown>) => start(async () => {
-    await fn()
-    router.refresh()
+    setMutationError("")
+    try { await fn(); router.refresh() } catch (e) { setMutationError(e instanceof Error ? e.message : "Could not save. Try again."); setCards(board.cards); setLists(board.lists) }
   })
 
   /**
@@ -238,17 +248,13 @@ export function Board({
         }
         case "l": case "L": {
           e.preventDefault()
-          if (may("card.create")) {
-            const name = window.prompt("Lane name")
-            if (name?.trim()) run(() => createList(board.id, name.trim()))
-          }
+          if (may("board.update")) setInputDialog({ title: "Lane name", initial: "", save: (name) => createList(board.id, name) })
           break
         }
         case "e": case "E": {
           e.preventDefault()
           if (may("board.update")) {
-            const next = window.prompt("Board name", board.name)
-            if (next?.trim() && next.trim() !== board.name) run(() => renameBoard(board.id, next.trim()))
+            setInputDialog({ title: "Board name", initial: board.name, save: (name) => renameBoard(board.id, name) })
           }
           break
         }
@@ -314,54 +320,41 @@ export function Board({
   const dropCard = (id: string) => setCards((prev) => prev.filter((c) => c.id !== id))
 
   // ── Menus ──
-  const cardMenu = (card: CardT, x: number, y: number) =>
-    setMenu({
-      x,
-      y,
-      items: [
-        { label: "Open card", shortcut: "↵", onSelect: () => setOpenCard(card.id) },
-        { label: card.memberIds.includes(me) ? "Leave card" : "Assign to me", onSelect: () => run(() => toggleCardMember(card.id, me)) },
-        {
-          label: "Move to",
-          children: lists.map((l) => ({
-            label: l.name,
-            disabled: l.id === card.listId,
-            onSelect: () => {
-              setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, listId: l.id, position: cardsIn(l.id).length, completedAt: l.isDoneList ? new Date().toISOString() : null } : c)))
-              run(() => moveCard(card.id, l.id, cardsIn(l.id).length))
-            },
-          })),
-        },
-        {
-          label: "Priority",
-          children: (["urgent", "high", "medium", "low"] as const).map((p) => ({ label: p[0].toUpperCase() + p.slice(1), checked: card.priority === p, onSelect: () => run(() => updateCard(card.id, { priority: p })) })),
-        },
-        { label: "Copy link", onSelect: () => navigator.clipboard.writeText(`${location.origin}/dashboard/b/${board.id}?card=${card.id}`) },
-        ...(may("poker.facilitate") || may("poker.read")
-          ? [{ label: "Estimate with poker", onSelect: () => setPokerCard(card.id) } as MenuItem]
-          : []),
-        { label: "Duplicate", onSelect: () => run(() => duplicateCard(card.id)) },
-        { separator: true },
-        { label: "Archive", onSelect: () => { dropCard(card.id); run(() => archiveCard(card.id)) } },
-        { label: "Delete", danger: true, onSelect: () => { if (confirm(`Delete ${card.key}?`)) { dropCard(card.id); run(() => deleteCard(card.id)) } } },
-      ],
-    })
-
-  const listMenu = (list: ListT, x: number, y: number) =>
-    setMenu({
-      x,
-      y,
-      items: [
-        { label: "Rename lane", onSelect: () => { const n = prompt("Lane name", list.name); if (n) run(() => updateList(board.id, list.id, { name: n })) } },
-        { label: list.wipLimit ? `WIP limit: ${list.wipLimit}` : "Set WIP limit", onSelect: () => { const n = prompt("Max cards in this lane (blank for none)", String(list.wipLimit ?? "")); if (n !== null) run(() => updateList(board.id, list.id, { wipLimit: n ? Number(n) : null })) } },
-        { label: "Cards here count as done", checked: list.isDoneList, onSelect: () => run(() => updateList(board.id, list.id, { isDoneList: !list.isDoneList })) },
-        { separator: true },
-        { label: "Delete lane", danger: true, onSelect: () => confirm(`Delete “${list.name}” and its cards?`) && run(() => deleteList(board.id, list.id)) },
-      ],
-    })
+  const askDelete = (title: string, description: string, action: () => Promise<unknown>) => { setDialogError(""); setConfirmation({ title, description, action }) }
+  const cardMenu = (card: CardT, x: number, y: number) => setMenu({ x, y, items: cardMenuItems([
+    { label: "Open card", shortcut: "↵", onSelect: () => setOpenCard(card.id) },
+    { label: card.memberIds.includes(me) ? "Leave card" : "Assign to me", permission: "card.assign", onSelect: () => run(() => toggleCardMember(card.id, me)) },
+    { label: "Assignees", permission: "card.assign", children: (board.settings?.enableMembers === false ? [] : board.people).map((p) => ({ label: p.name, checked: card.memberIds.includes(p.id), onSelect: () => run(() => toggleCardMember(card.id, p.id)) })) },
+    { label: "Labels", permission: "card.update", children: (board.settings?.enableLabels === false ? [] : board.labels).map((l) => ({ label: l.name, checked: card.labelIds.includes(l.id), onSelect: () => run(() => toggleCardLabel(card.id, l.id)) })) },
+    { label: "Move to", permission: "card.move", children: lists.map((l) => ({ label: l.name, disabled: l.id === card.listId, onSelect: () => run(() => moveCard(card.id, l.id, cardsIn(l.id).length)) })) },
+    { label: "Priority", permission: "card.priority", children: (["urgent", "high", "medium", "low"] as const).map((p) => ({ label: p, checked: card.priority === p, onSelect: () => run(() => updateCard(card.id, { priority: p })) })) },
+    { label: "Copy link", onSelect: () => { void navigator.clipboard.writeText(`${location.origin}/dashboard/b/${board.id}?card=${card.id}`) } },
+    { label: "Estimate with poker", permission: "poker.read", onSelect: () => setPokerCard(card.id) },
+    { label: "Duplicate", permission: "card.create", onSelect: () => run(() => duplicateCard(card.id)) },
+    { separator: true },
+    { label: "Archive", permission: "card.delete", onSelect: () => askDelete(`Archive ${card.key}?`, "This card will leave the active board.", () => archiveCard(card.id)) },
+    { label: "Delete", permission: "card.delete", danger: true, onSelect: () => askDelete(`Delete ${card.key}?`, "This card will be removed from the board.", () => deleteCard(card.id)) },
+  ], can) })
+  const listMenu = (list: ListT, x: number, y: number) => setMenu({ x, y, items: listMenuItems([
+    { label: "Add card", permission: "card.create", onSelect: () => setInputDialog({ title: "Card title", initial: "", save: (title) => createCard(board.id, list.id, title) }) },
+    { label: "Rename lane", permission: "board.update", onSelect: () => setInputDialog({ title: "Lane name", initial: list.name, save: (name) => updateList(board.id, list.id, { name }) }) },
+    { label: "Set WIP limit", permission: "board.update", onSelect: () => setInputDialog({ title: "WIP limit (blank for none)", initial: String(list.wipLimit ?? ""), type: "number", save: (value) => updateList(board.id, list.id, { wipLimit: value ? Number(value) : null }) }) },
+    { label: "Cards here count as done", permission: "board.update", checked: list.isDoneList, onSelect: () => run(() => updateList(board.id, list.id, { isDoneList: !list.isDoneList })) },
+    { label: "Column color", permission: "board.update", children: [{ label: "Default", onSelect: () => run(() => updateList(board.id, list.id, { color: null })) }, ...BOARD_COLORS.map((color) => ({ label: color, onSelect: () => run(() => updateList(board.id, list.id, { color })) }))] },
+    { separator: true },
+    { label: "Delete lane", permission: "board.update", danger: true, onSelect: () => askDelete(`Delete ${list.name}?`, "The lane and its cards will be removed from the board.", () => deleteList(board.id, list.id)) },
+  ], can) })
+  const boardMenu = (x: number, y: number) => setMenu({ x, y, items: boardMenuItems([
+    { label: chromeStar ? "Unstar board" : "Star board", onSelect: () => onStarChange?.(!chromeStar) },
+    { label: "Rename board", permission: "board.update", onSelect: () => setInputDialog({ title: "Board name", initial: board.name, save: (name) => renameBoard(board.id, name) }) },
+    { label: "People", onSelect: () => router.push(`/dashboard/b/${board.id}/settings`) },
+    { label: "Settings", onSelect: () => router.push(`/dashboard/b/${board.id}/settings?tab=general`) },
+    { label: "Archive board", permission: "board.delete", danger: true, onSelect: () => askDelete(`Archive ${board.name}?`, "This board will leave the boards overview.", () => archiveBoard(board.id)) },
+  ], can) })
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-6rem)]">
+      {mutationError && <p role="alert" className="mb-3 text-sm text-danger">{mutationError}</p>}
       {readOnly && (
         <p className="no-print mb-3 rounded-lg border border-line bg-panel-2 px-3 py-2 text-xs text-muted">
           You have read-only access to this board. Ask an owner for a role if you need to change anything.
@@ -369,7 +362,7 @@ export function Board({
       )}
 
       {/* Header + filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3" onContextMenu={(e) => { e.preventDefault(); boardMenu(e.clientX, e.clientY) }}>
         <span className="size-3 rounded-full" style={{ background: board.color ?? "var(--accent)" }} />
         {may("board.update") ? (
           <input
@@ -382,6 +375,7 @@ export function Board({
         ) : (
           <h1 className="min-w-0 max-w-md flex-1 truncate px-1 text-2xl font-semibold tracking-tight">{board.name}</h1>
         )}
+        <button type="button" className="btn-ghost" aria-label="Board options" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); boardMenu(r.left, r.bottom) }}>⋯</button>
         {pending && <span className="text-xs text-muted">Saving…</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-0.5 rounded-lg border border-line bg-panel-2 p-0.5" role="group" aria-label="View">
@@ -420,7 +414,7 @@ export function Board({
       </div>
 
       {view === "list" ? (
-        <ListView board={board} me={me} visible={visible} canEdit={may("card.create")} />
+        <ListView board={{ ...board, cards: cards.map((c) => cardPresentation(c, board.settings)) }} me={me} visible={visible} canEdit={may("card.create")} />
       ) : (
       /* Lanes */
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
@@ -430,7 +424,7 @@ export function Board({
               <Lane
                 key={list.id}
                 list={list}
-                cards={cardsIn(list.id)}
+                cards={cardsIn(list.id).map((c) => cardPresentation(c, board.settings))}
                 visible={visible}
                 labelsById={labelsById}
                 peopleById={peopleById}
@@ -439,20 +433,23 @@ export function Board({
                 onListMenu={listMenu}
                 onAdd={(title) => run(() => createCard(board.id, list.id, title))}
                 canAdd={may("card.create")}
-                canSort={draggable}
+                canSort={may("board.update")}
                 selected={selected}
                 onSelect={(id) => { setSelected(id); setOpenCard(id) }}
               />
             ))}
           </SortableContext>
-          {may("card.create") && <AddLane onAdd={(n) => run(() => createList(board.id, n))} />}
+          {may("board.update") && <AddLane onAdd={(n) => run(() => createList(board.id, n))} />}
         </div>
-        <DragOverlay>{dragging && <CardTile card={dragging} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
+        <DragOverlay>{dragging && <CardTile card={cardPresentation(dragging, board.settings)} labelsById={labelsById} peopleById={peopleById} overlay />}</DragOverlay>
       </DndContext>
       )}
 
       {sheet && <ShortcutsSheet open onClose={() => setSheet(false)} />}
 
+      {inputDialog && <InputDialog key={inputDialog.title} {...inputDialog} pending={pending} onClose={() => setInputDialog(null)} onSave={async (value) => { await inputDialog.save(value); router.refresh() }} />}
+      <ConfirmDialog open={!!confirmation} title={confirmation?.title ?? "Confirm"} description={confirmation?.description ?? ""} pending={pending} onClose={() => setConfirmation(null)} onConfirm={() => { if (!confirmation || pending) return; start(async () => { try { await confirmation.action(); setConfirmation(null); router.refresh() } catch (e) { setDialogError(e instanceof Error ? e.message : "Could not complete this action.") } }) }} />
+      {dialogError && <p role="alert" className="text-sm text-danger">{dialogError}</p>}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {openCard && (
         <CardPanel
@@ -514,7 +511,7 @@ function Lane({
   /** Enter on a highlighted card. */
   onSelect: (id: string) => void
 }) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" } })
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: list.id, data: { type: "list" }, disabled: !canSort })
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState("")
   const shown = cards.filter(visible)
@@ -523,8 +520,10 @@ function Lane({
   return (
     <section
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition, borderTopColor: list.color ?? undefined, borderTopWidth: list.color ? 3 : undefined }}
       className={`flex max-h-full w-72 shrink-0 flex-col rounded-xl border bg-panel ${over ? "border-danger/60" : "border-line"} ${isDragging ? "opacity-50" : ""}`}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); onListMenu(list, r.left, r.bottom) } }}
       aria-label={list.name}
       data-lane={list.name}
       onContextMenu={(e) => { if ((e.target as HTMLElement).closest("[data-card]")) return; e.preventDefault(); onListMenu(list, e.clientX, e.clientY) }}
@@ -622,13 +621,14 @@ function SortableCard({ card, hidden, ...rest }: {
       onClick={() => {
         rest.onSelect(card.id)
       }}
-      onKeyDown={(e) => { if (e.key === "Enter") rest.onOpen(card.id) }}
+      onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); rest.onMenu(card, r.left, r.bottom) } else if (e.key === "Enter") rest.onOpen(card.id) }}
       onContextMenu={(e) => { e.preventDefault(); rest.onMenu(card, e.clientX, e.clientY) }}
       data-card-id={card.id}
       className={`select-none rounded-lg ${isDragging ? "opacity-30" : ""} ${
         rest.selected === card.id ? "ring-2 ring-accent ring-offset-2 ring-offset-panel" : ""
       }`}
     >
+      <button type="button" aria-label={`${card.key} options`} className="float-right relative z-10 rounded px-2 py-1 text-muted hover:text-text" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); rest.onMenu(card, r.left, r.bottom) }}>⋯</button>
       <CardTile card={card} labelsById={rest.labelsById} peopleById={rest.peopleById} />
     </div>
   )
@@ -648,6 +648,7 @@ function CardTile({ card, labelsById, peopleById, overlay }: { card: CardT; labe
           ))}
         </div>
       )}
+      {card.fieldBadges && <div className="mb-2 flex flex-wrap gap-1">{card.fieldBadges.map((f) => <span key={f.name} title={`${f.name}: ${f.value}`} className="max-w-full truncate rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-muted">{f.name}: {f.value}</span>)}</div>}
       <p className={`leading-snug ${card.completedAt ? "text-muted line-through" : ""}`}>{card.title}</p>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
         <span className="font-mono">{card.key}</span>

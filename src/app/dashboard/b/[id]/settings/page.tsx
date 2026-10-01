@@ -5,9 +5,11 @@ import { getBoard } from "@/lib/lanes/data"
 import { boardAccess } from "@/lib/lanes/board-access"
 import { boardStats, listAudit, listCustomFields, listIntegrations, listWebhooks } from "@/lib/lanes/settings-data"
 import { PageHeader } from "@/components/ui"
+import { GeneralSettingsPanel } from "@/components/lanes/general-settings-panel"
 import { MembersPanel } from "@/components/lanes/members-panel"
 import { SettingsTabs } from "@/components/lanes/settings-tabs"
-import { FieldsPanel, IntegrationsPanel, WebhooksPanel, AuditPanel } from "@/components/lanes/settings-panels"
+import { FieldsPanel } from "@/components/lanes/fields-panel"
+import { IntegrationsPanel, WebhooksPanel, AuditPanel } from "@/components/lanes/settings-panels"
 import { IconArrowLeft } from "@/components/icons"
 
 export const dynamic = "force-dynamic"
@@ -41,7 +43,7 @@ export default async function BoardSettingsPage({
   const [members, stats, fields, hooks, integrations, audit] = await Promise.all([
     import("@/lib/lanes/members").then((m) => m.listBoardMembers(id, ctx.tenant.id)),
     boardStats(id),
-    access.permissions("board.read") ? listCustomFields(id) : Promise.resolve([]),
+    Promise.resolve(board.fields ?? []),
     access.permissions("webhook.manage") ? listWebhooks(id) : Promise.resolve([]),
     access.permissions("integration.manage") ? listIntegrations(id) : Promise.resolve([]),
     access.permissions("audit.read") ? listAudit(id) : Promise.resolve([]),
@@ -66,6 +68,7 @@ export default async function BoardSettingsPage({
         counts={{ people: members.filter((m) => !m.implicit).length, fields: fields.length, integrations: integrations.length, webhooks: hooks.length, audit: audit.length }}
       />
 
+      {tab === "general" && <GeneralSettingsPanel board={board} canManage={access.permissions("board.settings")} />}
       {(tab ?? "people") === "people" && (
         <MembersPanel
           boardId={board.id}
@@ -79,7 +82,7 @@ export default async function BoardSettingsPage({
       )}
 
       {(tab ?? "people") === "fields" && (
-        <FieldsPanel fields={fields} canManage={access.permissions("customField.manage")} />
+        <><p role={board.fieldError ? "alert" : undefined} className="text-sm text-warning">{board.fieldError}</p><FieldsPanel boardId={board.id} fields={fields} canManage={!board.fieldError && access.permissions("customField.manage")} /></>
       )}
       {(tab ?? "people") === "integrations" && (
         <IntegrationsPanel integrations={integrations} canManage={access.permissions("integration.manage")} />

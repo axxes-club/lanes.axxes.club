@@ -11,42 +11,6 @@ import type { CustomField, Integration, Webhook, AuditRow } from "@/lib/lanes/se
  * that says what is not built.
  */
 
-const FIELD_TYPES = ["text", "number", "select", "multi_select", "date", "checkbox", "url", "user"] as const
-
-export function FieldsPanel({ fields, canManage }: { fields: CustomField[]; canManage: boolean }) {
-  return (
-    <section className="space-y-4">
-      {fields.length === 0 ? (
-        <Empty
-          icon={<IconInfo size={20} />}
-          title="No custom fields on this board"
-          body="Custom fields are per board, so two boards can disagree about what they track. Values live on the card's own JSON, which keeps a read to a single row."
-        />
-      ) : (
-        <div className="card divide-y divide-line-soft overflow-hidden">
-          {fields.map((f) => (
-            <div key={f.id} className="flex items-center gap-4 px-5 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{f.name}</p>
-                <p className="truncate font-mono text-[11px] text-faint">{f.key}</p>
-              </div>
-              <span className="rounded-md bg-panel-3 px-2 py-0.5 font-mono text-[11px] text-muted">{f.type}</span>
-              {f.required && <span className="text-[11px] text-warning">required</span>}
-              {f.showOnCard && <span className="text-[11px] text-muted">on card</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ReadOnlyNotice
-        can={canManage}
-        what="Creating and editing field definitions"
-        why="The table, the schema and the read path are done. The write path is not — so the button is not here rather than here and broken."
-      />
-    </section>
-  )
-}
-
 const PROVIDERS: Record<string, { label: string; blurb: string }> = {
   github: { label: "GitHub", blurb: "Pull requests, reviews and check runs on a card." },
   gitlab: { label: "GitLab", blurb: "Merge requests and pipelines." },

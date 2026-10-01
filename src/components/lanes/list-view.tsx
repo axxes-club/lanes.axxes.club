@@ -6,6 +6,7 @@ import { cx } from "@/components/ui"
 import { Avatar } from "@/components/avatar"
 import { IconArrowDown, IconArrowUp, IconPlus, IconSearch } from "@/components/icons"
 import type { BoardT, CardT, ListT, PersonT, Priority } from "@/lib/lanes/types"
+import { fieldDisplay } from "@/lib/lanes/field-validation"
 import { createCard, updateCard } from "@/lib/lanes/actions"
 
 /**
@@ -102,9 +103,10 @@ export function ListView({
               <Header label="Card" sortKey="title" className="w-[38%]" />
               <Header label="Lane" sortKey="lane" className="w-[16%]" />
               <Header label="Priority" sortKey="priority" className="w-[11%]" />
-              <Header label="Due" sortKey="due" className="w-[12%]" />
-              <Header label="Assignee" className="w-[15%]" />
-              <Header label="Progress" className="w-[8%]" />
+              {board.settings?.enableDueDates !== false && <Header label="Due" sortKey="due" className="w-[12%]" />}
+              {board.settings?.enableMembers !== false && <Header label="Assignee" className="w-[15%]" />}
+              {board.settings?.enableChecklists !== false && <Header label="Progress" className="w-[8%]" />}
+              {(board.fields ?? []).map((f) => <Header key={f.id} label={f.name} />)}
             </tr>
           </thead>
           <tbody>
@@ -142,12 +144,12 @@ export function ListView({
                   </td>
                   <td className="px-3 py-2.5 text-muted">{list?.name ?? "—"}</td>
                   <td className={cx("px-3 py-2.5 capitalize", PRIORITY_TONE[c.priority])}>{c.priority}</td>
-                  <td className={cx("px-3 py-2.5 text-xs", overdue ? "font-medium text-danger" : "text-muted")}>
+                  {board.settings?.enableDueDates !== false && <td className={cx("px-3 py-2.5 text-xs", overdue ? "font-medium text-danger" : "text-muted")}>
                     {c.dueDate
                       ? new Date(c.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                       : "—"}
-                  </td>
-                  <td className="px-3 py-2.5">
+                  </td>}
+                  {board.settings?.enableMembers !== false && <td className="px-3 py-2.5">
                     <span className="flex -space-x-1.5">
                       {c.memberIds.slice(0, 3).map((id) => {
                         const p = peopleById.get(id)
@@ -155,17 +157,18 @@ export function ListView({
                       })}
                       {c.memberIds.length === 0 && <span className="text-xs text-faint">—</span>}
                     </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs tabular-nums text-muted">
+                  </td>}
+                  {board.settings?.enableChecklists !== false && <td className="px-3 py-2.5 text-xs tabular-nums text-muted">
                     {c.checklistTotal > 0 ? `${c.checklistDone}/${c.checklistTotal}` : "—"}
-                  </td>
+                  </td>}
+                  {(board.fields ?? []).map((f) => <td key={f.id} className="px-3 py-2.5 text-xs text-muted">{fieldDisplay(f, c.customFields?.[f.key], board.people)}</td>)}
                 </tr>
               )
             })}
 
             {newLane && (
               <tr>
-                <td colSpan={6} className="px-3 py-2">
+                <td colSpan={6 + (board.fields?.length ?? 0)} className="px-3 py-2">
                   <form
                     className="flex items-center gap-2"
                     onSubmit={(e) => {

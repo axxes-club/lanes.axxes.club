@@ -1,4 +1,7 @@
 import "server-only"
+import { fieldDisplay } from "./field-validation"
+import { availableCustomFields } from "./settings-data"
+import { requireBoard, requireCard } from "./access"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import type { BoardT, CardDetailT, CardT, PersonT, Priority } from "./types"
@@ -50,8 +53,9 @@ export async function getBoard(tenantId: string, boardId: string): Promise<Board
     .where(and(eq(s.projects.id, boardId), eq(s.projects.tenantId, tenantId), isNull(s.projects.deletedAt)))
     .catch(() => [])
   if (!project) return null
+  await requireBoard(boardId, "board.read")
 
-  const [lists, cards, labels, people] = await Promise.all([
+  const [lists, cards, labels, people, fieldState] = await Promise.all([
     db.select().from(s.projectLists).where(and(eq(s.projectLists.projectId, boardId), isNull(s.projectLists.deletedAt))).orderBy(asc(s.projectLists.position)),
     db
       .select()
@@ -60,7 +64,9 @@ export async function getBoard(tenantId: string, boardId: string): Promise<Board
       .orderBy(asc(s.projectCards.position)),
     db.select().from(s.projectLabels).where(eq(s.projectLabels.projectId, boardId)).orderBy(asc(s.projectLabels.createdAt)),
     workspacePeople(tenantId),
+    availableCustomFields(boardId),
   ])
+  const fields = fieldState.fields
   const cardIds = cards.map((c) => c.id)
   const [cardLabels, cardMembers, checklistCounts, commentCounts] = cardIds.length
     ? await Promise.all([
@@ -101,8 +107,11 @@ export async function getBoard(tenantId: string, boardId: string): Promise<Board
     description: project.description,
     color: project.color,
     keyPrefix: prefix,
+    settings: project.settings ?? {},
+    fields,
+    fieldError: fieldState.error,
     lists: lists.map((l) => ({ id: l.id, name: l.name, position: l.position, wipLimit: l.wipLimit, isDoneList: !!l.isDoneList, color: l.color })),
-    cards: cards.map((c) => toCard(c, prefix, labelMap.get(c.id), memberMap.get(c.id), checkMap.get(c.id), commentMap.get(c.id))),
+    cards: cards.map((c) => ({ ...toCard(c, prefix, labelMap.get(c.id), memberMap.get(c.id), checkMap.get(c.id), commentMap.get(c.id)), fieldBadges: fields.filter(f => f.showOnCard && (c.customFields ?? {})[f.key] != null).map(f => ({ name: f.name, value: fieldDisplay(f, (c.customFields ?? {})[f.key], people) })), customFields: Object.fromEntries(fields.filter(f => Object.hasOwn(c.customFields ?? {}, f.key)).map(f => [f.key, (c.customFields ?? {})[f.key]])) })),
     labels: labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
     people,
   }
@@ -143,7 +152,9 @@ export async function getCardDetail(tenantId: string, cardId: string, viewerId: 
     .where(and(eq(s.projectCards.id, cardId), eq(s.projects.tenantId, tenantId), isNull(s.projectCards.deletedAt)))
     .catch(() => [])
   if (!row) return null
+  await requireCard(cardId, "card.read")
   const { card, project } = row
+  const { fields } = await availableCustomFields(project.id)
 
   const [labels, members, checklists, comments, activity] = await Promise.all([
     db.select().from(s.projectCardLabels).where(eq(s.projectCardLabels.cardId, cardId)),
@@ -172,6 +183,7 @@ export async function getCardDetail(tenantId: string, cardId: string, viewerId: 
   const { linksForCard } = await import("./link-data")
 
   return {
+    customFields: Object.fromEntries(fields.filter(f => Object.hasOwn(card.customFields ?? {}, f.key)).map(f => [f.key, (card.customFields ?? {})[f.key]])),
     ...toCard(card, keyPrefix(project.settings, project.name), labels, members, { total, done }, comments.length),
     links: await linksForCard(tenantId, cardId),
     checklists: checklists.map((cl) => ({

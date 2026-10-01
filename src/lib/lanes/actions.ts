@@ -3,6 +3,10 @@
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { listSettingsSchema } from "./settings-validation"
+import { requireBoard as boardFor, requireCard as cardFor } from "./access"
+import { requireBoardPermission } from "./board-access"
+import { recordActivity as log } from "./activity"
 import { randomBytes } from "crypto"
 import { db, schema as s } from "@/lib/db"
 import { requireContext } from "@/lib/context"
@@ -12,31 +16,6 @@ import type { CardDetailT, Priority } from "./types"
 
 const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"]
 const LABEL_COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899"]
-
-async function boardFor(boardId: string) {
-  const ctx = await requireContext()
-  const [project] = await db
-    .select()
-    .from(s.projects)
-    .where(and(eq(s.projects.id, boardId), eq(s.projects.tenantId, ctx.tenant.id), isNull(s.projects.deletedAt)))
-  if (!project) throw new Error("Board not found")
-  return { ctx, project }
-}
-
-async function cardFor(cardId: string) {
-  const ctx = await requireContext()
-  const [row] = await db
-    .select({ card: s.projectCards, project: s.projects })
-    .from(s.projectCards)
-    .innerJoin(s.projects, eq(s.projects.id, s.projectCards.projectId))
-    .where(and(eq(s.projectCards.id, cardId), eq(s.projects.tenantId, ctx.tenant.id), isNull(s.projectCards.deletedAt)))
-  if (!row) throw new Error("Card not found")
-  return { ctx, ...row }
-}
-
-async function log(ctx: { tenant: { id: string }; userId: string }, projectId: string, type: string, description: string, cardId?: string | null, listId?: string | null) {
-  await db.insert(s.projectActivity).values({ projectId, tenantId: ctx.tenant.id, cardId: cardId ?? null, listId: listId ?? null, type, description, userId: ctx.userId })
-}
 
 const touch = (projectId: string) => db.update(s.projects).set({ updatedAt: new Date() }).where(eq(s.projects.id, projectId))
 const refresh = (boardId: string) => revalidatePath(`/dashboard/b/${boardId}`)
@@ -96,7 +75,7 @@ export async function createBoard(form: FormData) {
 }
 
 export async function renameBoard(boardId: string, name: string) {
-  const { ctx, project } = await boardFor(boardId)
+  const { ctx, project } = await boardFor(boardId, "board.update")
   const clean = name.trim().slice(0, 100)
   if (!clean) return
   await db.update(s.projects).set({ name: clean, updatedAt: new Date() }).where(eq(s.projects.id, project.id))
@@ -105,16 +84,16 @@ export async function renameBoard(boardId: string, name: string) {
 }
 
 export async function archiveBoard(boardId: string) {
-  const { ctx, project } = await boardFor(boardId)
+  const { ctx, project } = await boardFor(boardId, "board.delete")
   await db.update(s.projects).set({ archivedAt: new Date(), archivedById: ctx.userId, status: "archived" }).where(eq(s.projects.id, project.id))
   revalidatePath("/dashboard")
-  redirect("/dashboard")
+  refresh(boardId)
 }
 
 // ── Lists ────────────────────────────────────────────────────────────────
 
 export async function createList(boardId: string, name: string) {
-  const { ctx, project } = await boardFor(boardId)
+  const { ctx, project } = await boardFor(boardId, "board.update")
   const clean = name.trim().slice(0, 80)
   if (!clean) return
   const [{ max }] = await db.select({ max: sql<number>`coalesce(max(${s.projectLists.position}), -1)`.mapWith(Number) }).from(s.projectLists).where(eq(s.projectLists.projectId, project.id))
@@ -124,22 +103,30 @@ export async function createList(boardId: string, name: string) {
   refresh(boardId)
 }
 
-export async function updateList(boardId: string, listId: string, patch: { name?: string; wipLimit?: number | null; isDoneList?: boolean }) {
-  const { project } = await boardFor(boardId)
-  await db
-    .update(s.projectLists)
-    .set({
-      ...(patch.name !== undefined ? { name: patch.name.trim().slice(0, 80) || "Untitled" } : {}),
-      ...(patch.wipLimit !== undefined ? { wipLimit: patch.wipLimit && patch.wipLimit > 0 ? Math.min(99, patch.wipLimit) : null } : {}),
-      ...(patch.isDoneList !== undefined ? { isDoneList: patch.isDoneList } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(s.projectLists.id, listId), eq(s.projectLists.projectId, project.id)))
+export async function updateList(boardId: string, listId: string, patch: { name?: string; wipLimit?: number | null; isDoneList?: boolean; color?: string | null }) {
+  const { ctx, project } = await boardFor(boardId, "board.update")
+  const clean = listSettingsSchema.parse(patch)
+  const result = await db.execute(sql`
+    with changed as (
+      update project_lists set name = coalesce(${clean.name ?? null}, name),
+        wip_limit = case when ${clean.wipLimit !== undefined} then ${clean.wipLimit ?? null}::integer else wip_limit end,
+        color = case when ${clean.color !== undefined} then ${clean.color ?? null}::text else color end,
+        is_done_list = coalesce(${clean.isDoneList ?? null}::boolean, is_done_list), updated_at = now()
+      where id = ${listId}::uuid and project_id = ${project.id}::uuid and deleted_at is null returning id, is_done_list
+    ), completed as (
+      update project_cards c set completed_at = case when l.is_done_list then coalesce(c.completed_at, now()) else null end,
+        completed_by_id = case when l.is_done_list then coalesce(c.completed_by_id, ${ctx.userId}) else null end, updated_at = now()
+      from changed l where c.list_id = l.id and c.project_id = ${project.id}::uuid and c.deleted_at is null and c.archived_at is null and ${clean.isDoneList !== undefined} returning c.id
+    ), activity as (
+      insert into project_activity (id, project_id, tenant_id, user_id, list_id, type, description, created_at)
+      select gen_random_uuid(), ${project.id}::uuid, ${ctx.tenant.id}::uuid, ${ctx.userId}, id, 'list.updated', 'updated column settings', now() from changed
+    ) select id from changed`)
+  if (!result.rows.length) throw new Error("Lane not found")
   refresh(boardId)
 }
 
 export async function deleteList(boardId: string, listId: string) {
-  const { ctx, project } = await boardFor(boardId)
+  const { ctx, project } = await boardFor(boardId, "board.update")
   const now = new Date()
   await db.update(s.projectCards).set({ deletedAt: now }).where(and(eq(s.projectCards.listId, listId), eq(s.projectCards.projectId, project.id)))
   await db.update(s.projectLists).set({ deletedAt: now }).where(and(eq(s.projectLists.id, listId), eq(s.projectLists.projectId, project.id)))
@@ -148,7 +135,7 @@ export async function deleteList(boardId: string, listId: string) {
 }
 
 export async function reorderLists(boardId: string, orderedIds: string[]) {
-  const { project } = await boardFor(boardId)
+  const { project } = await boardFor(boardId, "board.update")
   const valid = await db.select({ id: s.projectLists.id }).from(s.projectLists).where(eq(s.projectLists.projectId, project.id))
   const ok = new Set(valid.map((v) => v.id))
   await renumber(s.projectLists, orderedIds.filter((id) => ok.has(id)))
@@ -158,10 +145,10 @@ export async function reorderLists(boardId: string, orderedIds: string[]) {
 // ── Cards ────────────────────────────────────────────────────────────────
 
 export async function createCard(boardId: string, listId: string, title: string) {
-  const { ctx, project } = await boardFor(boardId)
+  const { ctx, project } = await boardFor(boardId, "card.create")
   const clean = title.trim().slice(0, 300)
   if (!clean) return
-  const [list] = await db.select().from(s.projectLists).where(and(eq(s.projectLists.id, listId), eq(s.projectLists.projectId, project.id)))
+  const [list] = await db.select().from(s.projectLists).where(and(eq(s.projectLists.id, listId), eq(s.projectLists.projectId, project.id), isNull(s.projectLists.deletedAt)))
   if (!list) throw new Error("Lane not found")
   const [{ seq }] = await db
     .select({ seq: sql<number>`coalesce(max((${s.projectCards.customFields}->>'seq')::int), 0)`.mapWith(Number) })
@@ -187,7 +174,7 @@ export async function createCard(boardId: string, listId: string, title: string)
 }
 
 export async function moveCard(cardId: string, toListId: string, toIndex: number) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.move")
   const [target] = await db.select().from(s.projectLists).where(and(eq(s.projectLists.id, toListId), eq(s.projectLists.projectId, project.id), isNull(s.projectLists.deletedAt)))
   if (!target) throw new Error("Lane not found")
 
@@ -220,7 +207,8 @@ export async function updateCard(
   cardId: string,
   patch: { title?: string; description?: string | null; priority?: Priority; dueDate?: string | null; coverColor?: string | null }
 ) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, Object.keys(patch).every((key) => key === "priority") ? "card.priority" : "card.update")
+  if (patch.priority !== undefined) await requireBoardPermission(project.id, "card.priority")
   const changes: Partial<typeof s.projectCards.$inferInsert> = { updatedAt: new Date() }
   const notes: string[] = []
   if (patch.title !== undefined && patch.title.trim()) { changes.title = patch.title.trim().slice(0, 300); notes.push("renamed it") }
@@ -234,28 +222,28 @@ export async function updateCard(
 }
 
 export async function deleteCard(cardId: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.delete")
   await db.update(s.projectCards).set({ deletedAt: new Date() }).where(eq(s.projectCards.id, card.id))
   await log(ctx, project.id, "card.deleted", `deleted ${keyPrefix(project.settings, project.name)}-${cardSeq(card.customFields)}`, null, card.listId)
   refresh(project.id)
 }
 
 export async function archiveCard(cardId: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.delete")
   await db.update(s.projectCards).set({ archivedAt: new Date() }).where(eq(s.projectCards.id, card.id))
   await log(ctx, project.id, "card.archived", "archived the card", card.id)
   refresh(project.id)
 }
 
 export async function duplicateCard(cardId: string) {
-  const { card, project } = await cardFor(cardId)
+  const { card, project } = await cardFor(cardId, "card.create")
   const newId = await createCard(project.id, card.listId, `${card.title} (copy)`)
-  if (newId) await db.update(s.projectCards).set({ description: card.description, priority: card.priority, dueDate: card.dueDate }).where(eq(s.projectCards.id, newId))
+  if (newId) await db.update(s.projectCards).set({ description: card.description, priority: card.priority, dueDate: card.dueDate, coverColor: card.coverColor, customFields: sql`${JSON.stringify(Object.fromEntries(Object.entries(card.customFields ?? {}).filter(([key]) => key !== "seq")))}::jsonb || jsonb_build_object('seq', ${s.projectCards.customFields}->'seq')` }).where(eq(s.projectCards.id, newId))
   refresh(project.id)
 }
 
 export async function toggleCardLabel(cardId: string, labelId: string) {
-  const { project, card } = await cardFor(cardId)
+  const { project, card } = await cardFor(cardId, "card.update")
   const [label] = await db.select().from(s.projectLabels).where(and(eq(s.projectLabels.id, labelId), eq(s.projectLabels.projectId, project.id)))
   if (!label) return
   const removed = await db.delete(s.projectCardLabels).where(and(eq(s.projectCardLabels.cardId, card.id), eq(s.projectCardLabels.labelId, labelId))).returning()
@@ -264,7 +252,7 @@ export async function toggleCardLabel(cardId: string, labelId: string) {
 }
 
 export async function createLabel(boardId: string, name: string, color: string) {
-  const { project } = await boardFor(boardId)
+  const { project } = await boardFor(boardId, "board.update")
   const clean = name.trim().slice(0, 40)
   if (!clean) return
   await db.insert(s.projectLabels).values({ projectId: project.id, name: clean, color: /^#[0-9a-f]{6}$/i.test(color) ? color : LABEL_COLORS[3] })
@@ -272,7 +260,7 @@ export async function createLabel(boardId: string, name: string, color: string) 
 }
 
 export async function toggleCardMember(cardId: string, userId: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.assign")
   const [member] = await db
     .select({ id: s.tenantMemberships.id })
     .from(s.tenantMemberships)
@@ -287,13 +275,13 @@ export async function toggleCardMember(cardId: string, userId: string) {
 // ── Checklists & comments ────────────────────────────────────────────────
 
 export async function addChecklist(cardId: string, title: string) {
-  const { card, project } = await cardFor(cardId)
+  const { card, project } = await cardFor(cardId, "card.update")
   await db.insert(s.projectChecklists).values({ cardId: card.id, title: title.trim().slice(0, 100) || "Checklist" })
   refresh(project.id)
 }
 
 export async function addChecklistItem(cardId: string, checklistId: string, text: string) {
-  const { card, project } = await cardFor(cardId)
+  const { card, project } = await cardFor(cardId, "card.update")
   const [cl] = await db.select().from(s.projectChecklists).where(and(eq(s.projectChecklists.id, checklistId), eq(s.projectChecklists.cardId, card.id)))
   if (!cl || !text.trim()) return
   const [{ pos }] = await db.select({ pos: sql<number>`coalesce(max(${s.projectChecklistItems.position}), -1)`.mapWith(Number) }).from(s.projectChecklistItems).where(eq(s.projectChecklistItems.checklistId, cl.id))
@@ -302,7 +290,7 @@ export async function addChecklistItem(cardId: string, checklistId: string, text
 }
 
 export async function toggleChecklistItem(cardId: string, itemId: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.update")
   const [item] = await db
     .select({ item: s.projectChecklistItems })
     .from(s.projectChecklistItems)
@@ -318,7 +306,7 @@ export async function toggleChecklistItem(cardId: string, itemId: string) {
 }
 
 export async function deleteChecklistItem(cardId: string, itemId: string) {
-  const { card, project } = await cardFor(cardId)
+  const { card, project } = await cardFor(cardId, "card.update")
   const lists = await db.select({ id: s.projectChecklists.id }).from(s.projectChecklists).where(eq(s.projectChecklists.cardId, card.id))
   const ids = new Set(lists.map((l) => l.id))
   const [item] = await db.select().from(s.projectChecklistItems).where(eq(s.projectChecklistItems.id, itemId))
@@ -327,7 +315,7 @@ export async function deleteChecklistItem(cardId: string, itemId: string) {
 }
 
 export async function addComment(cardId: string, content: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.comment")
   const clean = content.trim().slice(0, 5000)
   if (!clean) return
   await db.insert(s.projectCardComments).values({ cardId: card.id, tenantId: ctx.tenant.id, content: clean, userId: ctx.userId })
@@ -336,7 +324,7 @@ export async function addComment(cardId: string, content: string) {
 }
 
 export async function deleteComment(cardId: string, commentId: string) {
-  const { ctx, card, project } = await cardFor(cardId)
+  const { ctx, card, project } = await cardFor(cardId, "card.comment")
   await db
     .update(s.projectCardComments)
     .set({ deletedAt: new Date() })

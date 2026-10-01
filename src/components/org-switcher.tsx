@@ -52,7 +52,16 @@ export function OrgSwitcher({
   const [error, setError] = useState('')
   function choose(tenantId: string) {
     if (tenantId === current.tenantId) return
-    startTransition(async () => { try { await switchOrganization(tenantId); router.refresh() } catch (e) { setError(e instanceof Error ? e.message : 'Could not switch workspace.') } })
+    setError('')
+    // switchOrganization reports a refusal as { error } rather than throwing (v2).
+    startTransition(async () => {
+      try {
+        const result = await switchOrganization(tenantId)
+        if (result?.error) { setError(result.error); return }
+        router.push('/dashboard')
+        router.refresh()
+      } catch (e) { setError(e instanceof Error ? e.message : 'Could not switch workspace.') }
+    })
   }
   const actions = [
     ...(memberships.length > 1 ? [{ label: 'Switch workspace', children: memberships.map((m) => ({ label: m.name, checked: m.tenantId === current.tenantId, disabled: pending, onSelect: () => choose(m.tenantId) })) }] : []),

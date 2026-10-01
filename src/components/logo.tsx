@@ -1,7 +1,10 @@
+"use client"
+
+import { useBrand, CustomerLogo, CustomerMark } from "@/components/brand"
 import { product } from "@/product.config"
 import { cx } from "@/components/ui"
 
-export function Logo({ size = "md", className }: { size?: "md" | "lg"; className?: string }) {
+function AxxesLogo({ size = "md", className }: { size?: "md" | "lg"; className?: string }) {
   return (
     <div className={cx("flex items-center gap-2.5", className)}>
       <span
@@ -21,4 +24,11 @@ export function Logo({ size = "md", className }: { size?: "md" | "lg"; className
       </span>
     </div>
   )
+}
+
+/** The product logo: a white-label customer's own brand when they have one. */
+export function Logo(props: React.ComponentProps<typeof AxxesLogo>) {
+  const brand = useBrand()
+  const large = (props as { size?: string }).size === "lg"
+  return brand ? <CustomerLogo brand={brand} productName={product.name} large={large} /> : <AxxesLogo {...props} />
 }

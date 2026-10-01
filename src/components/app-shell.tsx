@@ -165,7 +165,7 @@ export function AppShell({
           <div className="my-4 border-t border-line" />
 
           <p className={cx("eyebrow mb-2 px-3", collapsed && "lg:sr-only")}>AXXES</p>
-          <ProductSwitcher collapsed={collapsed} />
+          <ProductSwitcher collapsed={collapsed} tenantId={membership.tenantId} />
         </div>
 
         <div className={cx("shrink-0 space-y-2 border-t border-line p-3", collapsed && "lg:px-2")}>

@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 import { db, schema as s } from "@/lib/db"
+import { publicOrigin } from "@/lib/public-origin"
 
 const DEV_PASSWORD = "axxes-local-dev"
 
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Sign in over the real endpoint, so the cookie is the one Better Auth issues.
-  const origin = request.nextUrl.origin
+  const origin = publicOrigin(request)
   const signIn = await fetch(`${origin}/api/auth/sign-in/email`, {
     method: "POST",
     headers: { "content-type": "application/json", origin },
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
 
   // Replay those cookies through the cookies API; raw Set-Cookie headers
   // appended to a redirect response are dropped.
-  const response = NextResponse.redirect(new URL("/dashboard", request.url))
+  const response = NextResponse.redirect(new URL("/dashboard", publicOrigin(request)))
   for (const raw of setCookies) {
     const [pair, ...attrs] = raw.split(";")
     const split = pair.indexOf("=")

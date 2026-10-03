@@ -1,3 +1,4 @@
+import {platformAccessAllowed} from '@/lib/platform-access';
 import "server-only"
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
 import { and, desc, eq, isNull } from "drizzle-orm"
@@ -131,6 +132,7 @@ export async function resolveToken(raw: string) {
   if (!row || !row.hash || row.revokedAt || row.isActive === false) return null
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null
   if (!secretMatches(secretFrom(raw), row.hash)) return null
+  if(!await platformAccessAllowed(row.userId, row.tenantId)) return null;
   return row
 }
 

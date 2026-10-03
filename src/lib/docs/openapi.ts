@@ -148,9 +148,10 @@ export const OPENAPI = {
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
           { name: "list", in: "query", schema: { type: "string", format: "uuid" } },
           { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } },
+          { name: "cursor", in: "query", schema: { type: "string" }, description: "Opaque nextCursor from the previous page; retain list filter." },
         ],
         responses: {
-          "200": { description: "The cards", ...json({ type: "object", properties: { data: { type: "object", properties: { cards: { type: "array", items: ref("Card") } } } } }) },
+          "200": { description: "The cards", ...json({ type: "object", properties: { data: { type: "object", properties: { cards: { type: "array", items: ref("Card") }, nextCursor: { type: ["string", "null"] } } } } }) },
           ...commonErrors,
         },
       },

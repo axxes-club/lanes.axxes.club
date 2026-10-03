@@ -1,0 +1,3 @@
+import { describe, expect, it } from 'vitest';
+import { encodeCardCursor, decodeCardCursor } from '../../src/lib/lanes/card-cursor';
+describe('card cursor',()=>{it('preserves the stable position/id pair',()=>{const id='00000000-0000-4000-8000-000000000001';expect(decodeCardCursor(encodeCardCursor(1.25,id))).toEqual({position:1.25,id});});it('rejects invalid positions and identifiers',()=>{for(const value of ['bad',Buffer.from(JSON.stringify({position:null,id:'bad'})).toString('base64url')])expect(()=>decodeCardCursor(value)).toThrow();expect(()=>encodeCardCursor(Infinity,'bad')).toThrow();});});

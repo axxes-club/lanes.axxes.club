@@ -1,3 +1,4 @@
+import { encodeCardCursor, decodeCardCursor } from "@/lib/lanes/card-cursor"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { db, schema } from "@/lib/db"
 import { authenticate, forbidden, unauthorized } from "@/lib/lanes/api-auth"
@@ -54,7 +55,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const listId = url.searchParams.get("list")
     const take = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? 100) || 100))
 
-    const cards = await db
+    let cursor: { position: number; id: string } | undefined
+    try { const raw = url.searchParams.get("cursor"); if (raw) cursor = decodeCardCursor(raw) } catch { return fail(req, "Invalid card cursor.", 400, "bad_request") }
+    const rows = await db
       .select({
         id: schema.projectCards.id,
         listId: schema.projectCards.listId,
@@ -78,13 +81,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           isNull(schema.projectCards.deletedAt),
           isNull(schema.projectCards.archivedAt),
           listId ? eq(schema.projectCards.listId, listId) : undefined,
+          cursor ? sql`(${schema.projectCards.position}, ${schema.projectCards.id}) > (${cursor.position}, ${cursor.id}::uuid)` : undefined,
         ),
       )
-      .orderBy(asc(schema.projectCards.position))
-      .limit(take)
+      .orderBy(asc(schema.projectCards.position), asc(schema.projectCards.id))
+      .limit(take + 1)
+    const cards = rows.slice(0, take)
+    const last = cards.at(-1)
 
     return withHeaders(
       ok({
+        nextCursor: rows.length > take && last ? encodeCardCursor(last.position, last.id) : null,
         board: { id: board.id, name: board.name, keyPrefix: boardPrefix(board.settings, board.name) },
         cards: cards.map((c) => ({
           id: c.id,

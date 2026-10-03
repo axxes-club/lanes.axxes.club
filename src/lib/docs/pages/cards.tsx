@@ -16,6 +16,7 @@ export const cards: DocBody = [
       not. Anything a human is going to type into a script should be the key.
     </>,
   ),
+  p("Card lists are ordered by position and ID. Use nextCursor as the cursor parameter to load the next page, keeping the same list filter. A null nextCursor marks the final page. The maximum page size is 200."),
   code(
     "bash",
     `curl https://lanes.axxes.club/api/v1/cards/AB-42     -H "Authorization: Bearer $LANES_TOKEN"

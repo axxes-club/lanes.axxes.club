@@ -31,7 +31,7 @@ export const rateLimits: DocBody = [
   p(<>Every response carries them, including successful ones, so a client can adapt before it hits a 429.</>),
   code(
     "bash",
-    `curl -sI https://lanes.axxes.club/api/v1/boards -H "Authorization: Bearer $LANES_TOKEN" \\
+    `curl -sI https://lanes.axxes.app/api/v1/boards -H "Authorization: Bearer $LANES_TOKEN" \\
   | grep -i x-ratelimit
 
 # x-ratelimit-limit: 600

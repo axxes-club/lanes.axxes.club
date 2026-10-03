@@ -33,7 +33,7 @@ export const boards: DocBody = [
   ),
   code(
     "bash",
-    `curl -X POST https://lanes.axxes.club/api/v1/boards \\
+    `curl -X POST https://lanes.axxes.app/api/v1/boards \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"name":"Q1 launch","template":"release","description":"Everything shipping in Q1"}'`,
@@ -84,10 +84,10 @@ export const boards: DocBody = [
   ),
   code(
     "bash",
-    `curl "https://lanes.axxes.club/api/v1/boards?limit=50" \\
+    `curl "https://lanes.axxes.app/api/v1/boards?limit=50" \\
   -H "Authorization: Bearer $LANES_TOKEN"
 
 # then
-curl "https://lanes.axxes.club/api/v1/boards?limit=50&cursor=$CURSOR" …`,
+curl "https://lanes.axxes.app/api/v1/boards?limit=50&cursor=$CURSOR" …`,
   ),
 ]

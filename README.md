@@ -1,8 +1,8 @@
 # Lanes — boards for every team
 
-Kanban boards for AXXES workspaces (lanes.axxes.club). Uses the shared
+Kanban boards for AXXES workspaces (lanes.axxes.app). Uses the shared
 `projects` / `project_*` tables, so boards also appear as Projects across the
-AXXES suite. Sign-in via Handshake.
+AXXES suite. Sign in with your AXXES account.
 
 ## What is here
 
@@ -16,7 +16,7 @@ AXXES suite. Sign-in via Handshake.
 
 ## Developer docs
 
-**[lanes.axxes.club/docs](https://lanes.axxes.club/docs)** — quickstart,
+**[lanes.axxes.app/docs](https://lanes.axxes.app/docs)** — quickstart,
 authentication, every endpoint, the permission matrix, rate limits, webhooks
 and how to migrate from Jira, Linear, Trello or Asana.
 
@@ -25,7 +25,7 @@ and how to migrate from Jira, Linear, Trello or Asana.
 ```bash
 npx tsc --noEmit          # must be 0 errors
 npm run build
-npx vercel --prod --yes   # takes the lanes.axxes.club alias
+git push origin HEAD:main # GCP production delivery
 node scripts/fix-card-keys.mjs   # only if a board shows duplicate keys
 ```
 

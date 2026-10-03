@@ -55,7 +55,7 @@ export const errors: DocBody = [
     `type Envelope<T> = { data: T } | { error: { message: string; code: string; hint?: string; requestId: string } }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(\`https://lanes.axxes.club/api/v1\${path}\`, {
+  const res = await fetch(\`https://lanes.axxes.app/api/v1\${path}\`, {
     ...init,
     headers: { Authorization: \`Bearer \${process.env.LANES_TOKEN}\`, "Content-Type": "application/json", ...init?.headers },
   })

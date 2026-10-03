@@ -64,7 +64,7 @@ export const permissions: DocBody = [
   ),
   code(
     "bash",
-    `curl https://lanes.axxes.club/api/v1/boards/$BOARD \\
+    `curl https://lanes.axxes.app/api/v1/boards/$BOARD \\
   -H "Authorization: Bearer $LANES_TOKEN"
 
 # { "data": { "board": { … }, "yourRole": "product_owner" } }`,

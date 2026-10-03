@@ -37,7 +37,7 @@ const INTRO: DocBody = [
     </>,
   ),
   h2("generate-a-client", "Generate a client"),
-  code0("bash", `curl -o openapi.json https://lanes.axxes.club/api/v1/openapi.json
+  code0("bash", `curl -o openapi.json https://lanes.axxes.app/api/v1/openapi.json
 
 # TypeScript
 npx openapi-typescript openapi.json -o lanes.d.ts

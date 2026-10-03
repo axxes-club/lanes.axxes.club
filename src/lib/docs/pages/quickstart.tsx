@@ -34,7 +34,7 @@ export const quickstart: DocBody = [
   ),
   code(
     "bash",
-    `curl https://lanes.axxes.club/api/v1/boards \\
+    `curl https://lanes.axxes.app/api/v1/boards \\
   -H "Authorization: Bearer lnk_9f2c1a7b4e8d6035_5hK2pQ…"`,
     "Every board in the workspace",
   ),
@@ -61,7 +61,7 @@ export const quickstart: DocBody = [
   ep("POST", "/api/v1/boards", "Create a board from a template"),
   code(
     "bash",
-    `curl -X POST https://lanes.axxes.club/api/v1/boards \\
+    `curl -X POST https://lanes.axxes.app/api/v1/boards \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"name":"Website relaunch","template":"sprint"}'`,
@@ -74,7 +74,7 @@ export const quickstart: DocBody = [
   ),
   code(
     "bash",
-    `curl -X POST https://lanes.axxes.club/api/v1/boards/$BOARD/cards \\
+    `curl -X POST https://lanes.axxes.app/api/v1/boards/$BOARD/cards \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Rewrite the pricing page","priority":"high"}'`,
@@ -91,7 +91,7 @@ export const quickstart: DocBody = [
   ),
   code(
     "bash",
-    `curl https://lanes.axxes.club/api/v1/cards/AB-42 \\
+    `curl https://lanes.axxes.app/api/v1/cards/AB-42 \\
   -H "Authorization: Bearer $LANES_TOKEN"`,
   ),
   note(

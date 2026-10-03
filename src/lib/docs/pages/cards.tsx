@@ -19,10 +19,10 @@ export const cards: DocBody = [
   p("Card lists are ordered by position and ID. Use nextCursor as the cursor parameter to load the next page, keeping the same list filter. A null nextCursor marks the final page. The maximum page size is 200."),
   code(
     "bash",
-    `curl https://lanes.axxes.club/api/v1/cards/AB-42     -H "Authorization: Bearer $LANES_TOKEN"
-curl https://lanes.axxes.club/api/v1/cards/ab-42     -H "Authorization: Bearer $LANES_TOKEN"
-curl https://lanes.axxes.club/api/v1/cards/AB-0042   -H "Authorization: Bearer $LANES_TOKEN"
-curl https://lanes.axxes.club/api/v1/cards/$UUID     -H "Authorization: Bearer $LANES_TOKEN"`,
+    `curl https://lanes.axxes.app/api/v1/cards/AB-42     -H "Authorization: Bearer $LANES_TOKEN"
+curl https://lanes.axxes.app/api/v1/cards/ab-42     -H "Authorization: Bearer $LANES_TOKEN"
+curl https://lanes.axxes.app/api/v1/cards/AB-0042   -H "Authorization: Bearer $LANES_TOKEN"
+curl https://lanes.axxes.app/api/v1/cards/$UUID     -H "Authorization: Bearer $LANES_TOKEN"`,
     "All four are the same card",
   ),
 
@@ -40,7 +40,7 @@ curl https://lanes.axxes.club/api/v1/cards/$UUID     -H "Authorization: Bearer $
   ),
   code(
     "bash",
-    `curl -X POST https://lanes.axxes.club/api/v1/boards/$BOARD/cards \\
+    `curl -X POST https://lanes.axxes.app/api/v1/boards/$BOARD/cards \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Rotate the signing key","priority":"high","dueDate":"2026-12-01T17:00:00Z"}'`,
@@ -56,13 +56,13 @@ curl https://lanes.axxes.club/api/v1/cards/$UUID     -H "Authorization: Bearer $
   code(
     "bash",
     `# Only the priority changes
-curl -X PATCH https://lanes.axxes.club/api/v1/cards/AB-42 \\
+curl -X PATCH https://lanes.axxes.app/api/v1/cards/AB-42 \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"priority":"urgent"}'
 
 # Move it into the done lane
-curl -X PATCH https://lanes.axxes.club/api/v1/cards/AB-42 \\
+curl -X PATCH https://lanes.axxes.app/api/v1/cards/AB-42 \\
   -H "Authorization: Bearer $LANES_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d "{\\"listId\\":\\"$DONE_LANE\\"}"`,
@@ -86,7 +86,7 @@ curl -X PATCH https://lanes.axxes.club/api/v1/cards/AB-42 \\
   ),
   code(
     "bash",
-    `curl -X DELETE https://lanes.axxes.club/api/v1/cards/AB-42 \\
+    `curl -X DELETE https://lanes.axxes.app/api/v1/cards/AB-42 \\
   -H "Authorization: Bearer $LANES_TOKEN" -i
 # HTTP/1.1 204 No Content`,
   ),

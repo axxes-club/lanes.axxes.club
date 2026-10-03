@@ -76,10 +76,10 @@ export const OPENAPI = {
     description:
       "The delivery workspace API. Every response is `{ data }` or `{ error: { message, code, hint, requestId } }` — never a third shape.\n\n" +
       "A token resolves to the board role of the person who created it, so a script can do exactly what its owner could and not one thing more.",
-    contact: { name: "AXXES", url: "https://lanes.axxes.club/docs" },
+    contact: { name: "AXXES", url: "https://lanes.axxes.app/docs" },
     license: { name: "Proprietary" },
   },
-  servers: [{ url: "https://lanes.axxes.club/api/v1", description: "Production" }],
+  servers: [{ url: "https://lanes.axxes.app/api/v1", description: "Production" }],
   security: [{ bearerAuth: [] }],
   tags: [
     { name: "Boards", description: "Boards, lanes and labels" },

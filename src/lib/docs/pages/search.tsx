@@ -12,7 +12,7 @@ export const search: DocBody = [
   h2("use", "Using it"),
   code(
     "bash",
-    `curl "https://lanes.axxes.club/api/v1/search?q=onboarding" \\
+    `curl "https://lanes.axxes.app/api/v1/search?q=onboarding" \\
   -H "Authorization: Bearer $LANES_TOKEN"`,
   ),
   code(

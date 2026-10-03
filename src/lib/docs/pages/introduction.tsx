@@ -68,7 +68,7 @@ export const introduction: DocBody = [
       <code>x-lanes-version</code> tells you which you are talking to.
     </>,
   ),
-  code("bash", `curl -sI https://lanes.axxes.club/api/v1/boards -H "Authorization: Bearer $LANES_TOKEN" | grep -i x-lanes`),
+  code("bash", `curl -sI https://lanes.axxes.app/api/v1/boards -H "Authorization: Bearer $LANES_TOKEN" | grep -i x-lanes`),
 
   h2("where-next", "Where to go next"),
   list([

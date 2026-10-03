@@ -477,7 +477,7 @@ function ProductShot() {
         <span className="size-2.5 rounded-full bg-warning/60" aria-hidden />
         <span className="size-2.5 rounded-full bg-success/60" aria-hidden />
         <div className="ml-3 flex items-center gap-2 rounded-md bg-panel px-3 py-1 text-[11px] text-faint">
-          <IconSearch size={11} /> lanes.axxes.club/dashboard
+          <IconSearch size={11} /> lanes.axxes.app/dashboard
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+import { PulseTracker } from "@/components/pulse-tracker"
 import type { Metadata } from "next"
 import { BrandScope } from "@/components/brand"
 import { getCustomerBrand } from "@/lib/white-label"
@@ -19,7 +20,7 @@ async function AppLayout({ children }: { children: React.ReactNode }) {
       memberships={ctx.memberships}
       user={ctx.user}
     >
-      <div id="main">{children}</div>
+      <PulseTracker appKey="lanes" tenantId={ctx.tenant.id} userId={ctx.userId}/><div id="main">{children}</div>
     </AppShell>
   )
 }

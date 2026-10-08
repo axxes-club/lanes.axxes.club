@@ -51,7 +51,7 @@ export async function authenticate(req: Request): Promise<ApiAuth | null> {
     tenantId: token.tenantId,
     tokenId: token.id,
     workspaceRole: workspace?.role ?? "viewer",
-    accessFor: (boardId: string) => boardAccessFor(boardId, token.userId, workspace?.role ?? "viewer"),
+    accessFor: (boardId: string) => boardAccessFor(boardId, token.userId, token.tenantId, workspace?.role ?? "viewer"),
     scope: (s) => tokenAllows(token, s),
   }
 }
@@ -64,8 +64,12 @@ export async function authenticate(req: Request): Promise<ApiAuth | null> {
 async function boardAccessFor(
   boardId: string,
   userId: string,
+  tenantId: string,
   workspaceRole: string,
 ): Promise<BoardAccess> {
+  const [project]=await db.select({id:schema.projects.id}).from(schema.projects)
+    .where(and(eq(schema.projects.id,boardId),eq(schema.projects.tenantId,tenantId),isNull(schema.projects.deletedAt))).limit(1);
+  if(!project)return {role:"viewer",elevated:false,permissions:()=>false};
   const [row] = await db
     .select({ role: schema.boardMemberRoles.role })
     .from(schema.boardMemberRoles)

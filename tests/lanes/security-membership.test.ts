@@ -15,3 +15,9 @@ test('removed seats and suspended tenants invalidate otherwise valid bearer cred
   await db.exec("UPDATE tenants SET status='active',deleted_at=now()");expect(await authenticate(request)).toBeNull();
  }finally{await db.close();}
 });
+
+test('API board permissions reject foreign and deleted projects like browser permissions',async()=>{
+ const engine=new PGlite();state.db=drizzle(engine);
+ await engine.exec(`CREATE TABLE tenants(id uuid PRIMARY KEY,status text,deleted_at timestamptz);CREATE TABLE tenant_memberships(id uuid,user_id text,tenant_id uuid,role text,deleted_at timestamptz);CREATE TABLE projects(id uuid,tenant_id uuid,deleted_at timestamptz);CREATE TABLE board_member_roles(board_id uuid,user_id text,role text);INSERT INTO tenants VALUES('00000000-0000-4000-8000-000000000001','active',NULL);INSERT INTO tenant_memberships VALUES('00000000-0000-4000-8000-000000000002','actor','00000000-0000-4000-8000-000000000001','admin',NULL);INSERT INTO projects VALUES('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001',NULL),('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000009',NULL),('00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001',now());`);
+ try{const auth=await authenticate(new Request('https://lanes.axxes.app/api/v1/boards',{headers:{authorization:'Bearer unit-token'}}));expect(auth).not.toBeNull();expect((await auth!.accessFor('00000000-0000-4000-8000-000000000003')).permissions('card.read')).toBe(true);for(const boardId of ['00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000005'])expect((await auth!.accessFor(boardId)).permissions('card.read')).toBe(false);}finally{await engine.close();}
+});

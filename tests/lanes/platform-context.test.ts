@@ -1,3 +1,4 @@
+vi.mock('@/lib/security/admission-server',()=>({admitAction:async()=>{}}));
 import {beforeEach,expect,it,vi} from 'vitest';
 const state=vi.hoisted(()=>({selected:'denied',rows:[{tenantId:'denied',name:'A',slug:'a',role:'member',isPrimary:true},{tenantId:'eligible',name:'B',slug:'b',role:'member',isPrimary:false}],denyAll:false}));
 vi.mock('react',async()=>({...await vi.importActual('react'),cache:(fn:unknown)=>fn}));

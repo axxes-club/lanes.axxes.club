@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull, ne } from "drizzle-orm"
 import { NextResponse } from "next/server"
 import { fail } from "./api-response"
 import { db, schema } from "@/lib/db"
@@ -34,39 +34,24 @@ export async function authenticate(req: Request): Promise<ApiAuth | null> {
   const token = await resolveToken(match[1].trim())
   if (!token) return null
 
-  // A token is only valid for the workspace it was minted in.
-  const [membership] = await db
-    .select({ tenantId: schema.tenantMemberships.tenantId })
+  // Revocation via seat/tenant lifecycle is mandatory even when platform policy is off.
+  const [workspace]=await db.select({role:schema.tenantMemberships.role})
     .from(schema.tenantMemberships)
-    .where(
-      and(
-        eq(schema.tenantMemberships.userId, token.userId),
-        eq(schema.tenantMemberships.tenantId, token.tenantId),
-      ),
-    )
-    .limit(1)
-  if (!membership) return null
-
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  void touchToken(token.id, ip)
-
-  const [workspace] = await db
-    .select({ role: schema.tenantMemberships.role })
-    .from(schema.tenantMemberships)
-    .where(
-      and(
-        eq(schema.tenantMemberships.userId, token.userId),
-        eq(schema.tenantMemberships.tenantId, token.tenantId),
-      ),
-    )
-    .limit(1)
+    .innerJoin(schema.tenants,eq(schema.tenants.id,schema.tenantMemberships.tenantId))
+    .where(and(eq(schema.tenantMemberships.userId,token.userId),eq(schema.tenantMemberships.tenantId,token.tenantId),
+      isNull(schema.tenantMemberships.deletedAt),isNull(schema.tenants.deletedAt),
+      eq(schema.tenants.status,"active")))
+    .limit(1);
+  if(!workspace)return null;
+  // Forwarded headers are not trustworthy audit identity; retain no spoofable IP.
+  void touchToken(token.id);
 
   return {
     userId: token.userId,
     tenantId: token.tenantId,
     tokenId: token.id,
     workspaceRole: workspace?.role ?? "viewer",
-    accessFor: (boardId: string) => boardAccessFor(boardId, token.userId, workspace?.role ?? "viewer"),
+    accessFor: (boardId: string) => boardAccessFor(boardId, token.userId, token.tenantId, workspace?.role ?? "viewer"),
     scope: (s) => tokenAllows(token, s),
   }
 }
@@ -79,8 +64,12 @@ export async function authenticate(req: Request): Promise<ApiAuth | null> {
 async function boardAccessFor(
   boardId: string,
   userId: string,
+  tenantId: string,
   workspaceRole: string,
 ): Promise<BoardAccess> {
+  const [project]=await db.select({id:schema.projects.id}).from(schema.projects)
+    .where(and(eq(schema.projects.id,boardId),eq(schema.projects.tenantId,tenantId),isNull(schema.projects.deletedAt))).limit(1);
+  if(!project)return {role:"viewer",elevated:false,permissions:()=>false};
   const [row] = await db
     .select({ role: schema.boardMemberRoles.role })
     .from(schema.boardMemberRoles)

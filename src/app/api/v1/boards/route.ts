@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const limit_ = await rateLimit(`${auth.tokenId}:read`, "read")
   if (!limit_.ok) {
     return withHeaders(
-      fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),
+      fail(req, "Rate limit exceeded.", limit_.unavailable ? 503 : 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),
       limit_,
     )
   }
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   const limit_ = await rateLimit(`${auth.tokenId}:write`, "write")
   if (!limit_.ok) {
     return withHeaders(
-      fail(req, "Rate limit exceeded.", 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),
+      fail(req, "Rate limit exceeded.", limit_.unavailable ? 503 : 429, "rate_limited", `Try again in ${retryAfterSeconds(limit_)}s.`),
       limit_,
     )
   }

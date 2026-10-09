@@ -2,11 +2,11 @@ export interface Sql {query(text:string,values?:unknown[]):Promise<{rows:Record<
 export type AccessDecision={allowed:boolean,reason:'allowed'|'account_suspended'|'organization_suspended'|'membership_missing'|'service_denied',version:string};
 export async function evaluateAccess(db:Sql,userId:string,organizationId?:string,serviceId?:string):Promise<AccessDecision>{
  const u=(await db.query(`SELECT u.id,coalesce(p.state,'active') AS state,coalesce(p.revision,0)::text AS version FROM "user" u LEFT JOIN platform_subject_policy p ON p.subject_kind='user' AND p.subject_id=u.id WHERE u.id=$1`,[userId])).rows[0];
- if(!u||u.state==='suspended')return {allowed:false,reason:'account_suspended',version:String(u?.version??'0')};
+ if(!u||u.state!=='active')return {allowed:false,reason:'account_suspended',version:String(u?.version??'0')};
  const version=String(u.version);
  if(organizationId){
   const t=(await db.query(`SELECT status,deleted_at FROM tenants WHERE id=$1`,[organizationId])).rows[0];
-  if(!t||t.deleted_at||['suspended','cancelled'].includes(String(t.status)))return {allowed:false,reason:'organization_suspended',version};
+  if(!t||t.deleted_at||t.status!=='active')return {allowed:false,reason:'organization_suspended',version};
   const m=(await db.query(`SELECT id FROM tenant_memberships WHERE user_id=$1 AND tenant_id=$2 AND deleted_at IS NULL`,[userId,organizationId])).rows[0];
   if(!m)return {allowed:false,reason:'membership_missing',version};
   if(serviceId){const organizationPolicy=(await db.query(`SELECT allowed FROM platform_organization_entitlements WHERE tenant_id=$1 AND service_id=$2`,[organizationId,serviceId])).rows[0];if(organizationPolicy?.allowed===false)return {allowed:false,reason:'service_denied',version};const e=(await db.query(`SELECT allowed FROM platform_entitlements WHERE user_id=$1 AND tenant_id=$2 AND service_id=$3`,[userId,organizationId,serviceId])).rows[0];if(e?.allowed===false)return {allowed:false,reason:'service_denied',version};}

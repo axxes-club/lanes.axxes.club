@@ -9,7 +9,7 @@ function AxxesLogo({ size = "md", className }: { size?: "md" | "lg"; className?:
     <div className={cx("flex items-center gap-2.5", className)}>
       <span
         className={cx(
-          "grid place-items-center rounded-lg bg-accent font-mono font-bold text-accent-fg",
+          "grid place-items-center rounded-[9px] app-tile font-bold",
           size === "lg" ? "size-10 text-lg" : "size-7 text-sm",
         )}
         aria-hidden
